@@ -57,6 +57,8 @@ type actionFinishedMsg struct {
 	results []actionResult
 }
 
+// Model owns the full TUI state machine: auth/loading, selection, confirmation,
+// bulk execution, and the final result screen.
 type Model struct {
 	client        *chatgpt.Client
 	version       string
@@ -81,7 +83,7 @@ func New(client *chatgpt.Client, version string) Model {
 		client:      client,
 		version:     version,
 		phase:       phaseLoading,
-		loadingText: "Launching Chrome and loading your ChatGPT session...\n\nIf Chrome opens a login page, finish signing in there and keep this terminal open.",
+		loadingText: "",
 		sessionID:   client.SessionIDLabel(),
 		selected:    make(map[string]struct{}),
 	}
@@ -97,6 +99,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 	case loadResultMsg:
+		// Conversation loading is kicked off immediately in Init and moves the
+		// model from auth/loading into the selectable list view.
 		if msg.err != nil {
 			m.phase = phaseError
 			m.err = msg.err
@@ -108,6 +112,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.phase = phaseDone
 		}
 	case snapshotMsg:
+		// Status/log snapshots come from the ChatGPT client while browser auth
+		// and API pagination are happening in the background.
 		m.logs = msg.logs
 		m.email = msg.email
 		m.sessionID = msg.sessionID
@@ -162,6 +168,7 @@ func (m Model) View() tea.View {
 	default:
 		content = ""
 	}
+	// Bubble Tea v2 drives fullscreen rendering through the returned View.
 	v := tea.NewView(baseAppStyle.Width(max(80, m.width)).Height(max(24, m.height)).Render(content))
 	v.AltScreen = true
 	return v
@@ -250,6 +257,8 @@ func (m Model) selectedAction() actionChoice {
 	return actionChoice(m.actionCursor)
 }
 
+// selectedConversations preserves the on-screen ordering instead of returning
+// map iteration order, which keeps confirmations and action results stable.
 func (m Model) selectedConversations() []chatgpt.Conversation {
 	selected := make([]chatgpt.Conversation, 0, len(m.selected))
 	for _, conv := range m.conversations {
@@ -288,7 +297,7 @@ func (m Model) renderSelection() string {
 		"",
 		table,
 		"",
-		m.renderFooterBar("j/k move   space toggle   a all/none   enter continue   q quit"),
+		m.renderFooterBar("j/k move   space mark   a all   enter actions   q quit"),
 	)
 }
 
@@ -352,12 +361,14 @@ func (m Model) renderConfirmation() string {
 		"",
 		m.renderPanel("confirm", statusPanelStyle.Width(m.contentWidth()).Render(panel.String())),
 		"",
-		m.renderFooterBar("y confirm   n back"),
+		m.renderFooterBar("y confirm   esc back"),
 	)
 }
 
 func (m Model) renderRunning() string {
 	_, logHeight := m.loadingHeights()
+	// Running keeps recent logs in the main panel so action progress is visible
+	// without reopening the full debug log viewport used during auth/error flows.
 	panel := lipgloss.JoinVertical(
 		lipgloss.Left,
 		titleStyle.Render("Processing"),
@@ -440,6 +451,7 @@ func renderError(err error) string {
 
 func (m Model) renderLoading() string {
 	mainHeight, _ := m.loadingHeights()
+	// Before the session is ready, the main pane is just status plus recent logs.
 	body := lipgloss.JoinVertical(
 		lipgloss.Left,
 		statusBannerStyle.Width(m.contentWidth()).Render(m.loadingText),
@@ -475,6 +487,8 @@ func (m Model) renderError() string {
 }
 
 func (m Model) renderChrome() string {
+	// Keep the top chrome intentionally dense; the sample design favors a
+	// terminal-status-strip feel over large dashboard cards.
 	top := lipgloss.JoinHorizontal(
 		lipgloss.Top,
 		appTitleStyle.Render("bulk-delete-chatgpt-conversations"),
@@ -503,6 +517,8 @@ func (m Model) renderConversationTable(height int) string {
 		formatTableRow(widths, headers[0], headers[1], headers[2], headers[3]),
 	))
 
+	// Only render the visible window around the cursor so the pane height stays
+	// stable even when the account has hundreds of conversations.
 	for i := visible.start; i < visible.end; i++ {
 		conv := m.conversations[i]
 		cursor := " "
@@ -582,6 +598,8 @@ func (m Model) tailLogs(width int) []string {
 	if width <= 0 {
 		width = 120
 	}
+	// Wrap first, then take the tail, so a single long debug line does not
+	// consume the entire viewport width or hide the latest events.
 	wrapped := make([]string, 0, len(m.logs))
 	for _, line := range m.logs {
 		wrapped = append(wrapped, wrapLines(line, width)...)
@@ -599,6 +617,7 @@ func (m Model) visibleRange() struct{ start, end int } {
 		return struct{ start, end int }{0, len(m.conversations)}
 	}
 
+	// Keep the cursor roughly centered until we hit the list boundaries.
 	start := m.cursor - maxItems/2
 	if start < 0 {
 		start = 0
@@ -658,6 +677,7 @@ func loadConversationsCmd(client *chatgpt.Client) tea.Cmd {
 			return loadResultMsg{err: err}
 		}
 
+		// Mirror the web UI by showing the most recently updated conversations first.
 		slices.SortStableFunc(conversations, func(a, b chatgpt.Conversation) int {
 			if a.UpdateTime.Equal(b.UpdateTime.Time) {
 				return strings.Compare(strings.ToLower(a.Title), strings.ToLower(b.Title))
@@ -673,6 +693,7 @@ func loadConversationsCmd(client *chatgpt.Client) tea.Cmd {
 }
 
 func pollSnapshotCmd(client *chatgpt.Client) tea.Cmd {
+	// Polling keeps the TUI reactive while auth/fetch work stays inside the client.
 	return tea.Tick(400*time.Millisecond, func(time.Time) tea.Msg {
 		return snapshotMsg{
 			status:    client.Status(),
@@ -689,6 +710,7 @@ func runBulkActionCmd(client *chatgpt.Client, conversations []chatgpt.Conversati
 		defer cancel()
 
 		results := make([]actionResult, 0, len(conversations))
+		// Apply mutations serially so status and rate-limiting behavior remain predictable.
 		for _, conv := range conversations {
 			var err error
 			switch action {
@@ -741,6 +763,8 @@ func (m Model) bodyHeights() (int, int) {
 	}
 	headerHeight := lipgloss.Height(m.renderChrome())
 	available := m.height - headerHeight - 8
+	// The selection view gives most of the terminal to the table and reserves a
+	// smaller slice for transient log-bearing states.
 	logHeight := min(8, max(6, available/3))
 	tableHeight := max(10, available-logHeight)
 	return tableHeight, logHeight
@@ -752,6 +776,7 @@ func (m Model) loadingHeights() (int, int) {
 	}
 	headerHeight := lipgloss.Height(m.renderChrome())
 	available := m.height - headerHeight - 8
+	// Loading/error/running panes need a little more room for wrapped log lines.
 	logHeight := min(8, max(6, available/3))
 	mainHeight := max(10, available-logHeight-2)
 	return mainHeight, logHeight
@@ -771,7 +796,10 @@ func (m Model) renderPanel(title, body string) string {
 }
 
 func (m Model) renderFooterBar(text string) string {
-	return footerStyle.Width(m.contentWidth()).Render(text)
+	// Shortcuts are packed into one line when possible and spill into a second
+	// line on narrower terminals instead of growing the footer vertically.
+	lines := layoutFooterLines(splitFooterItems(text), m.contentWidth()-2)
+	return footerStyle.Width(m.contentWidth()).Render(strings.Join(lines, "\n"))
 }
 
 func (m Model) phaseLabel() string {
@@ -822,6 +850,55 @@ func wrapLines(s string, width int) []string {
 	return lines
 }
 
+func splitFooterItems(text string) []string {
+	parts := strings.Split(text, "   ")
+	items := make([]string, 0, len(parts))
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part != "" {
+			items = append(items, part)
+		}
+	}
+	return items
+}
+
+func layoutFooterLines(items []string, width int) []string {
+	if len(items) == 0 {
+		return []string{""}
+	}
+	if width <= 0 {
+		return []string{strings.Join(items, "  ")}
+	}
+	separator := " • "
+	line1 := ""
+	line2 := ""
+	for _, item := range items {
+		candidate := item
+		if line1 != "" {
+			candidate = line1 + separator + item
+		}
+		if lipgloss.Width(candidate) <= width {
+			line1 = candidate
+			continue
+		}
+		if line2 == "" {
+			line2 = item
+			continue
+		}
+		candidate = line2 + separator + item
+		if lipgloss.Width(candidate) <= width {
+			line2 = candidate
+			continue
+		}
+		line2 = trim(candidate, width)
+		break
+	}
+	if line2 == "" {
+		return []string{line1}
+	}
+	return []string{line1, line2}
+}
+
 func isQuitKey(msg tea.KeyPressMsg) bool {
 	return msg.String() == "ctrl+c" || msg.String() == "q"
 }
@@ -830,6 +907,8 @@ func isBackKey(msg tea.KeyPressMsg) bool {
 	return msg.Code == tea.KeyEscape || msg.String() == "esc"
 }
 
+// Bubble Tea v2 key names vary a bit across terminals, so the helpers below
+// match both semantic key codes and common string forms.
 func isConfirmKey(msg tea.KeyPressMsg) bool {
 	return msg.Code == tea.KeyEnter || msg.Code == tea.KeyReturn || msg.String() == "enter"
 }
