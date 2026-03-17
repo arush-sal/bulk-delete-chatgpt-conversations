@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net"
 	"net/http"
 	"net/http/cookiejar"
@@ -16,11 +15,13 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/chromedp/cdproto/browser"
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/cdproto/runtime"
+	"github.com/chromedp/cdproto/target"
 	"github.com/chromedp/chromedp"
 )
 
@@ -47,16 +48,20 @@ type conversationList struct {
 
 type sessionResponse struct {
 	AccessToken string `json:"accessToken"`
+	User        struct {
+		Email string `json:"email"`
+	} `json:"user"`
 }
 
 type Client struct {
 	debug        bool
-	logger       *log.Logger
 	sessionToken string
 	csrfToken    string
 	accessToken  string
+	userEmail    string
 	status       string
 	httpClient   *http.Client
+	debugPort    int
 
 	allocCtx    context.Context
 	allocCancel context.CancelFunc
@@ -66,6 +71,8 @@ type Client struct {
 
 	mu       sync.Mutex
 	statusMu sync.RWMutex
+	logsMu   sync.RWMutex
+	logs     []string
 }
 
 type AuthError struct {
@@ -95,7 +102,6 @@ func NewFromEnv() (*Client, error) {
 	debug := parseBoolEnv("DEBUG")
 	client := &Client{
 		debug:        debug,
-		logger:       log.New(os.Stderr, "debug: ", log.LstdFlags),
 		sessionToken: sessionToken,
 		csrfToken:    strings.TrimSpace(os.Getenv("CHATGPT_CSRF_TOKEN")),
 		status:       "Waiting to launch Chrome...",
@@ -123,6 +129,31 @@ func (c *Client) Status() string {
 	c.statusMu.RLock()
 	defer c.statusMu.RUnlock()
 	return c.status
+}
+
+func (c *Client) UserEmail() string {
+	c.statusMu.RLock()
+	defer c.statusMu.RUnlock()
+	return c.userEmail
+}
+
+func (c *Client) SessionIDLabel() string {
+	token := strings.TrimSpace(c.sessionToken)
+	if token == "" {
+		return "Unavailable"
+	}
+	if len(token) <= 16 {
+		return token
+	}
+	return token[:8] + "..." + token[len(token)-6:]
+}
+
+func (c *Client) Logs() []string {
+	c.logsMu.RLock()
+	defer c.logsMu.RUnlock()
+	out := make([]string, len(c.logs))
+	copy(out, c.logs)
+	return out
 }
 
 func (c *Client) ListConversations(ctx context.Context, pageSize int) ([]Conversation, error) {
@@ -214,14 +245,17 @@ func (c *Client) startBrowser() error {
 	}
 	c.profileDir = profileDir
 
-	windowsProfileDir, err := wslToWindowsPath(profileDir)
-	if err != nil {
-		return fmt.Errorf("convert browser profile path: %w", err)
-	}
-
 	debugPort, err := pickFreePort()
 	if err != nil {
 		return fmt.Errorf("pick debug port: %w", err)
+	}
+	c.debugPort = debugPort
+	profileArg := profileDir
+	if strings.HasSuffix(strings.ToLower(chromePath), ".exe") || strings.HasPrefix(chromePath, "/mnt/") {
+		profileArg, err = wslToWindowsPath(profileDir)
+		if err != nil {
+			return fmt.Errorf("convert browser profile path: %w", err)
+		}
 	}
 	args := []string{
 		"https://chatgpt.com/",
@@ -231,14 +265,12 @@ func (c *Client) startBrowser() error {
 		"--no-default-browser-check",
 		"--disable-popup-blocking",
 		"--start-maximized",
-		fmt.Sprintf("--user-data-dir=%s", windowsProfileDir),
+		fmt.Sprintf("--user-data-dir=%s", profileArg),
 	}
 	if parseBoolEnv("HEADLESS") {
 		args = append([]string{"--headless=new"}, args...)
 	}
 
-	c.setStatus(fmt.Sprintf("Running Chrome debugger via '%s %s'", chromePath, args))
-	time.Sleep(5 * time.Second)
 	if err := launchDetachedChrome(chromePath, args); err != nil {
 		return fmt.Errorf("launch chrome: %w", err)
 	}
@@ -293,12 +325,27 @@ func (c *Client) waitForAccessToken(ctx context.Context) error {
 		c.setStatus("Checking ChatGPT session in Chrome...")
 		var session sessionResponse
 		resp, err := c.fetchJSON(deadlineCtx, httpMethodGet, sessionAPIURL, nil)
+		if err != nil {
+			c.debugf("session poll error: %v", err)
+			if errors.Is(err, context.Canceled) ||
+				strings.Contains(err.Error(), "context canceled") ||
+				strings.Contains(err.Error(), "No target with given id found") {
+				if reattachErr := c.reattachToLivePage(); reattachErr != nil {
+					c.debugf("reattach failed: %v", reattachErr)
+				} else {
+					c.debugf("reattached to live page target")
+				}
+			}
+		} else {
+			c.debugf("session poll status=%d body=%s", resp.Status, truncate([]byte(resp.Text), 250))
+		}
 		if err == nil && resp.Status == http.StatusOK {
 			if err := json.Unmarshal(resp.Body, &session); err != nil {
 				return fmt.Errorf("decode session response: %w", err)
 			}
 			if session.AccessToken != "" {
 				c.accessToken = session.AccessToken
+				c.userEmail = strings.TrimSpace(session.User.Email)
 				if err := c.initializeHTTPClient(); err != nil {
 					return err
 				}
@@ -308,6 +355,7 @@ func (c *Client) waitForAccessToken(ctx context.Context) error {
 				c.debugf("chatgpt session authenticated")
 				return nil
 			}
+			c.debugf("session poll returned 200 without accessToken")
 		}
 
 		select {
@@ -370,25 +418,28 @@ func pickFreePort() (int, error) {
 }
 
 func (c *Client) seedCookies(ctx context.Context, sessionToken, csrfToken string) error {
-	if err := network.SetCookie("__Secure-next-auth.session-token", sessionToken).
-		WithDomain(".chatgpt.com").
-		WithPath("/").
-		WithSecure(true).
-		WithHTTPOnly(true).
-		Do(ctx); err != nil {
-		return fmt.Errorf("set session cookie: %w", err)
-	}
-
-	if csrfToken != "" {
-		if err := network.SetCookie("__Host-next-auth.csrf-token", csrfToken).
+	return chromedp.Run(ctx, chromedp.ActionFunc(func(runCtx context.Context) error {
+		if err := network.SetCookie("__Secure-next-auth.session-token", sessionToken).
+			WithDomain(".chatgpt.com").
 			WithPath("/").
 			WithSecure(true).
-			Do(ctx); err != nil {
-			return fmt.Errorf("set csrf cookie: %w", err)
+			WithHTTPOnly(true).
+			Do(runCtx); err != nil {
+			return fmt.Errorf("set session cookie: %w", err)
 		}
-	}
 
-	return nil
+		if csrfToken != "" {
+			if err := network.SetCookie("__Host-next-auth.csrf-token", csrfToken).
+				WithDomain("chatgpt.com").
+				WithPath("/").
+				WithSecure(true).
+				Do(runCtx); err != nil {
+				return fmt.Errorf("set csrf cookie: %w", err)
+			}
+		}
+
+		return nil
+	}))
 }
 
 func (c *Client) initializeHTTPClient() error {
@@ -522,17 +573,19 @@ func (c *Client) fetchJSON(ctx context.Context, method, url string, payload any)
 	return resp, nil
 }
 
-func (c *Client) evaluate(ctx context.Context, expression string, out any) error {
-	return chromedp.Run(c.browserCtx, chromedp.ActionFunc(func(runCtx context.Context) error {
-		evalCtx := runCtx
-		if ctx != nil {
-			evalCtx = ctx
+func (c *Client) evaluate(ctx context.Context, expression string, out any) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			c.debugf("evaluate panic recovered: %v", r)
+			err = fmt.Errorf("chrome evaluation panic: %v", r)
 		}
+	}()
 
+	return chromedp.Run(c.browserCtx, chromedp.ActionFunc(func(runCtx context.Context) error {
 		result, exception, err := runtime.Evaluate(expression).
 			WithAwaitPromise(true).
 			WithReturnByValue(true).
-			Do(evalCtx)
+			Do(runCtx)
 		if err != nil {
 			return err
 		}
@@ -582,7 +635,24 @@ func resolveChromePath() (string, error) {
 		return envPath, nil
 	}
 
+	pathCandidates := []string{
+		"google-chrome",
+		"google-chrome-stable",
+		"chromium",
+		"chromium-browser",
+	}
+	for _, candidate := range pathCandidates {
+		if resolved, err := exec.LookPath(candidate); err == nil {
+			return resolved, nil
+		}
+	}
+
 	candidates := []string{
+		"/usr/bin/google-chrome",
+		"/usr/bin/google-chrome-stable",
+		"/usr/bin/chromium",
+		"/usr/bin/chromium-browser",
+		"/snap/bin/chromium",
 		"/mnt/c/Program Files/Google/Chrome/Application/chrome.exe",
 		"/mnt/c/Program Files (x86)/Google/Chrome/Application/chrome.exe",
 		"/mnt/c/Program Files/Microsoft/Edge/Application/msedge.exe",
@@ -605,14 +675,23 @@ func wslToWindowsPath(path string) (string, error) {
 }
 
 func launchDetachedChrome(chromePath string, args []string) error {
-	windowsChromePath, err := wslToWindowsPath(chromePath)
-	if err != nil {
-		return err
+	if strings.HasSuffix(strings.ToLower(chromePath), ".exe") || strings.HasPrefix(chromePath, "/mnt/") {
+		windowsChromePath, err := wslToWindowsPath(chromePath)
+		if err != nil {
+			return err
+		}
+
+		cmdArgs := []string{"/C", "start", "", windowsChromePath}
+		cmdArgs = append(cmdArgs, args...)
+		cmd := exec.Command("cmd.exe", cmdArgs...)
+		return cmd.Start()
 	}
 
-	cmdArgs := []string{"/C", "start", "", windowsChromePath}
-	cmdArgs = append(cmdArgs, args...)
-	cmd := exec.Command("cmd.exe", cmdArgs...)
+	cmd := exec.Command(chromePath, args...)
+	cmd.Stdin = nil
+	cmd.Stdout = nil
+	cmd.Stderr = nil
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	return cmd.Start()
 }
 
@@ -632,6 +711,51 @@ func (c *Client) closeBrowserSession() {
 	}
 }
 
+func (c *Client) reattachToLivePage() error {
+	if c.debugPort == 0 {
+		return errors.New("debug port is not set")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("http://127.0.0.1:%d/json/list", c.debugPort), nil)
+	if err != nil {
+		return err
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	var infos []struct {
+		ID   string `json:"id"`
+		Type string `json:"type"`
+		URL  string `json:"url"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&infos); err != nil {
+		return err
+	}
+
+	var chosen target.ID
+	for _, info := range infos {
+		if info.Type != "page" {
+			continue
+		}
+		if strings.HasPrefix(info.URL, "chrome-extension://") {
+			continue
+		}
+		chosen = target.ID(info.ID)
+		if strings.Contains(info.URL, "chatgpt.com") || strings.Contains(info.URL, "auth.openai.com") {
+			break
+		}
+	}
+	if chosen == "" {
+		return errors.New("no live page target found")
+	}
+
+	c.browserCtx, c.browserStop = chromedp.NewContext(c.allocCtx, chromedp.WithTargetID(chosen))
+	return nil
+}
+
 func parseBoolEnv(key string) bool {
 	v := strings.TrimSpace(strings.ToLower(os.Getenv(key)))
 	ok, err := strconv.ParseBool(v)
@@ -640,8 +764,26 @@ func parseBoolEnv(key string) bool {
 
 func (c *Client) debugf(format string, args ...any) {
 	if c.debug {
-		c.logger.Printf(format, args...)
+		c.logsMu.Lock()
+		defer c.logsMu.Unlock()
+
+		line := clampLogLine(fmt.Sprintf(format, args...), 180)
+		c.logs = append(c.logs, time.Now().Format("15:04:05")+" "+line)
+		if len(c.logs) > 80 {
+			c.logs = append([]string(nil), c.logs[len(c.logs)-80:]...)
+		}
 	}
+}
+
+func clampLogLine(line string, width int) string {
+	runes := []rune(strings.ReplaceAll(line, "\n", " "))
+	if len(runes) <= width {
+		return string(runes)
+	}
+	if width <= 1 {
+		return string(runes[:width])
+	}
+	return string(runes[:width-1]) + "…"
 }
 
 func (c *Client) setStatus(status string) {

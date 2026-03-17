@@ -3,10 +3,11 @@ package main
 import (
 	"fmt"
 	"os"
+	"runtime/debug"
 
+	tea "charm.land/bubbletea/v2"
 	"github.com/arush-sal/bulk-delete-chatgpt-conversations/internal/chatgpt"
 	"github.com/arush-sal/bulk-delete-chatgpt-conversations/internal/tui"
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/joho/godotenv"
 )
 
@@ -19,7 +20,7 @@ func main() {
 	}
 	defer client.Close()
 
-	program := tea.NewProgram(tui.New(client))
+	program := tea.NewProgram(tui.New(client, versionString()))
 	if _, err := program.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "tui error: %v\n", err)
 		os.Exit(1)
@@ -28,11 +29,16 @@ func main() {
 
 func fatalWithSetup(err error) {
 	fmt.Fprintln(os.Stderr, err.Error())
-	if os.Getenv("CHATGPT_SESSION_TOKEN") == "" {
-		fmt.Fprintln(os.Stderr, "")
-		fmt.Fprintln(os.Stderr, "Set CHATGPT_SESSION_TOKEN in your environment or a .env file.")
-		fmt.Fprintln(os.Stderr, "Find it in your browser at chatgpt.com under:")
-		fmt.Fprintln(os.Stderr, "Developer Tools -> Application -> Storage -> Cookies -> __Secure-next-auth.session-token")
-	}
 	os.Exit(1)
+}
+
+func versionString() string {
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		return "dev"
+	}
+	if info.Main.Version != "" && info.Main.Version != "(devel)" {
+		return info.Main.Version
+	}
+	return "dev"
 }

@@ -3,12 +3,13 @@ package tui
 import (
 	"context"
 	"fmt"
+	"runtime"
 	"slices"
 	"strings"
 	"time"
 
+	tea "charm.land/bubbletea/v2"
 	"github.com/arush-sal/bulk-delete-chatgpt-conversations/internal/chatgpt"
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -39,7 +40,12 @@ type loadResultMsg struct {
 	err           error
 }
 
-type statusMsg string
+type snapshotMsg struct {
+	status    string
+	logs      []string
+	email     string
+	sessionID string
+}
 
 type actionResult struct {
 	id    string
@@ -53,10 +59,14 @@ type actionFinishedMsg struct {
 
 type Model struct {
 	client        *chatgpt.Client
+	version       string
 	width         int
 	height        int
 	phase         phase
 	loadingText   string
+	logs          []string
+	email         string
+	sessionID     string
 	conversations []chatgpt.Conversation
 	cursor        int
 	selected      map[string]struct{}
@@ -66,17 +76,19 @@ type Model struct {
 	err           error
 }
 
-func New(client *chatgpt.Client) Model {
+func New(client *chatgpt.Client, version string) Model {
 	return Model{
 		client:      client,
+		version:     version,
 		phase:       phaseLoading,
 		loadingText: "Launching Chrome and loading your ChatGPT session...\n\nIf Chrome opens a login page, finish signing in there and keep this terminal open.",
+		sessionID:   client.SessionIDLabel(),
 		selected:    make(map[string]struct{}),
 	}
 }
 
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(loadConversationsCmd(m.client), pollStatusCmd(m.client))
+	return tea.Batch(loadConversationsCmd(m.client), pollSnapshotCmd(m.client))
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -95,22 +107,24 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if len(m.conversations) == 0 {
 			m.phase = phaseDone
 		}
-	case statusMsg:
-		if m.phase == phaseLoading {
-			text := strings.TrimSpace(string(msg))
-			if text != "" {
-				m.loadingText = text
-			}
-			return m, pollStatusCmd(m.client)
+	case snapshotMsg:
+		m.logs = msg.logs
+		m.email = msg.email
+		m.sessionID = msg.sessionID
+		if text := strings.TrimSpace(msg.status); text != "" {
+			m.loadingText = text
+		}
+		if m.phase != phaseDone && m.phase != phaseError {
+			return m, pollSnapshotCmd(m.client)
 		}
 	case actionFinishedMsg:
 		m.results = msg.results
 		m.phase = phaseDone
 		return m, nil
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		switch m.phase {
 		case phaseLoading, phaseRunning:
-			if msg.String() == "ctrl+c" || msg.String() == "q" {
+			if isQuitKey(msg) {
 				return m, tea.Quit
 			}
 		case phaseSelect:
@@ -120,7 +134,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case phaseConfirm:
 			return m.updateConfirmation(msg)
 		case phaseDone, phaseError:
-			if msg.String() == "enter" || msg.String() == "q" || msg.String() == "esc" || msg.String() == "ctrl+c" {
+			if isConfirmKey(msg) || isQuitKey(msg) || isBackKey(msg) {
 				return m, tea.Quit
 			}
 		}
@@ -128,42 +142,46 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m Model) View() string {
+func (m Model) View() tea.View {
+	var content string
 	switch m.phase {
 	case phaseLoading:
-		return m.frame(m.loadingText)
+		content = m.renderLoading()
 	case phaseSelect:
-		return m.frame(m.renderSelection())
+		content = m.renderSelection()
 	case phaseAction:
-		return m.frame(m.renderActionPicker())
+		content = m.renderActionPicker()
 	case phaseConfirm:
-		return m.frame(m.renderConfirmation())
+		content = m.renderConfirmation()
 	case phaseRunning:
-		return m.frame(m.renderRunning())
+		content = m.renderRunning()
 	case phaseDone:
-		return m.frame(m.renderDone())
+		content = m.renderDone()
 	case phaseError:
-		return m.frame(renderError(m.err))
+		content = m.renderError()
 	default:
-		return ""
+		content = ""
 	}
+	v := tea.NewView(baseAppStyle.Width(max(80, m.width)).Height(max(24, m.height)).Render(content))
+	v.AltScreen = true
+	return v
 }
 
-func (m Model) updateSelection(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch msg.String() {
-	case "ctrl+c", "q":
+func (m Model) updateSelection(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	switch {
+	case isQuitKey(msg):
 		return m, tea.Quit
-	case "up", "k":
+	case isUpKey(msg):
 		if m.cursor > 0 {
 			m.cursor--
 		}
-	case "down", "j":
+	case isDownKey(msg):
 		if m.cursor < len(m.conversations)-1 {
 			m.cursor++
 		}
-	case " ":
+	case isToggleKey(msg):
 		m.toggleCurrent()
-	case "a":
+	case matchesRune(msg, "a"):
 		if len(m.selected) == len(m.conversations) {
 			m.selected = make(map[string]struct{})
 		} else {
@@ -171,7 +189,7 @@ func (m Model) updateSelection(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.selected[conv.ID] = struct{}{}
 			}
 		}
-	case "enter":
+	case isConfirmKey(msg):
 		if len(m.selected) > 0 {
 			m.phase = phaseAction
 		}
@@ -179,21 +197,21 @@ func (m Model) updateSelection(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m Model) updateActionPicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch msg.String() {
-	case "ctrl+c", "q":
+func (m Model) updateActionPicker(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	switch {
+	case isQuitKey(msg):
 		return m, tea.Quit
-	case "up", "k":
+	case isUpKey(msg):
 		if m.actionCursor > 0 {
 			m.actionCursor--
 		}
-	case "down", "j":
+	case isDownKey(msg):
 		if m.actionCursor < len(actionLabels)-1 {
 			m.actionCursor++
 		}
-	case "esc":
+	case isBackKey(msg):
 		m.phase = phaseSelect
-	case "enter":
+	case isConfirmKey(msg):
 		if m.actionCursor == int(actionCancel) {
 			m.phase = phaseSelect
 			return m, nil
@@ -203,13 +221,13 @@ func (m Model) updateActionPicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m Model) updateConfirmation(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch msg.String() {
-	case "ctrl+c", "q":
+func (m Model) updateConfirmation(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	switch {
+	case isQuitKey(msg):
 		return m, tea.Quit
-	case "n", "esc":
+	case matchesRune(msg, "n") || isBackKey(msg):
 		m.phase = phaseAction
-	case "y", "enter":
+	case matchesRune(msg, "y") || isConfirmKey(msg):
 		m.phase = phaseRunning
 		return m, runBulkActionCmd(m.client, m.selectedConversations(), m.selectedAction())
 	}
@@ -243,106 +261,132 @@ func (m Model) selectedConversations() []chatgpt.Conversation {
 }
 
 func (m Model) renderSelection() string {
-	var b strings.Builder
-	b.WriteString(titleStyle.Render("ChatGPT Conversations"))
-	b.WriteString("\n")
-	b.WriteString(subtleStyle.Render(fmt.Sprintf("%d conversations loaded, %d selected", len(m.conversations), len(m.selected))))
-	b.WriteString("\n\n")
-
 	if len(m.conversations) == 0 {
-		b.WriteString("No conversations found for this account.\n")
-		b.WriteString(helpStyle.Render("Press q to quit."))
-		return b.String()
+		return lipgloss.JoinVertical(
+			lipgloss.Left,
+			m.renderChrome(),
+			"",
+			m.renderPanel("Conversations", statusPanelStyle.Width(m.contentWidth()).Render("No conversations found for this account.")),
+			"",
+			m.renderFooterBar("q quit"),
+		)
 	}
 
-	visible := m.visibleRange()
-	for i := visible.start; i < visible.end; i++ {
-		conv := m.conversations[i]
-		cursor := " "
-		if i == m.cursor {
-			cursor = ">"
-		}
-		mark := " "
-		if _, ok := m.selected[conv.ID]; ok {
-			mark = "x"
-		}
+	tableHeight, _ := m.bodyHeights()
+	table := m.renderPanel(
+		fmt.Sprintf("conversations(all)[%d]", len(m.conversations)),
+		lipgloss.JoinVertical(
+			lipgloss.Left,
+			tableMetaStyle.Render(fmt.Sprintf("%d loaded   %d selected   %s", len(m.conversations), len(m.selected), m.phaseLabel())),
+			m.renderConversationTable(tableHeight),
+		),
+	)
 
-		line := fmt.Sprintf("%s [%s] %s", cursor, mark, titleFor(conv))
-		if i == m.cursor {
-			b.WriteString(selectedLineStyle.Render(line))
-		} else {
-			b.WriteString(line)
-		}
-		b.WriteString("\n")
-	}
-
-	b.WriteString("\n")
-	b.WriteString(helpStyle.Render("up/down: move  space: toggle  a: all/none  enter: continue  q: quit"))
-	return b.String()
+	return lipgloss.JoinVertical(
+		lipgloss.Left,
+		m.renderChrome(),
+		"",
+		table,
+		"",
+		m.renderFooterBar("j/k move   space toggle   a all/none   enter continue   q quit"),
+	)
 }
 
 func (m Model) renderActionPicker() string {
-	var b strings.Builder
-	b.WriteString(titleStyle.Render("Choose Action"))
-	b.WriteString("\n")
-	b.WriteString(subtleStyle.Render(fmt.Sprintf("%d conversations selected", len(m.selected))))
-	b.WriteString("\n\n")
+	var options strings.Builder
+	options.WriteString(titleStyle.Render("Choose Action"))
+	options.WriteString("\n")
+	options.WriteString(subtleStyle.Render(fmt.Sprintf("%d conversations selected", len(m.selected))))
+	options.WriteString("\n\n")
 
 	for i, label := range actionLabels {
 		prefix := "  "
 		if i == m.actionCursor {
 			prefix = "> "
-			b.WriteString(selectedLineStyle.Render(prefix + label))
+			options.WriteString(selectedLineStyle.Render(prefix + label))
 		} else {
-			b.WriteString(prefix + label)
+			options.WriteString(prefix + label)
 		}
-		b.WriteString("\n")
+		options.WriteString("\n")
 	}
 
-	b.WriteString("\n")
-	b.WriteString(helpStyle.Render("up/down: move  enter: choose  esc: back"))
-	return b.String()
+	options.WriteString("\n")
+	options.WriteString(helpStyle.Render("up/down: move  enter: choose  esc: back"))
+	return lipgloss.JoinVertical(
+		lipgloss.Left,
+		m.renderChrome(),
+		"",
+		m.renderPanel("actions", statusPanelStyle.Width(m.contentWidth()).Render(options.String())),
+		"",
+		m.renderFooterBar("j/k move   enter choose   esc back"),
+	)
 }
 
 func (m Model) renderConfirmation() string {
 	actionLabel := actionLabels[m.actionCursor]
 	targets := m.selectedConversations()
 
-	var b strings.Builder
-	b.WriteString(titleStyle.Render("Confirm"))
-	b.WriteString("\n")
-	b.WriteString(fmt.Sprintf("%s %d conversations?\n\n", actionLabel, len(targets)))
+	var panel strings.Builder
+	panel.WriteString(titleStyle.Render("Confirm"))
+	panel.WriteString("\n")
+	panel.WriteString(fmt.Sprintf("%s %d conversations?\n\n", actionLabel, len(targets)))
 	for i, conv := range targets {
 		if i >= 8 {
-			b.WriteString(subtleStyle.Render(fmt.Sprintf("...and %d more", len(targets)-i)))
-			b.WriteString("\n")
+			panel.WriteString(subtleStyle.Render(fmt.Sprintf("...and %d more", len(targets)-i)))
+			panel.WriteString("\n")
 			break
 		}
-		b.WriteString("• " + titleFor(conv) + "\n")
+		panel.WriteString("• " + displayTitle(conv) + "\n")
 	}
-	b.WriteString("\n")
+	panel.WriteString("\n")
 	if m.selectedAction() == actionDelete {
-		b.WriteString(warningStyle.Render("Delete marks conversations as not visible and may be hard to recover."))
+		panel.WriteString(warningStyle.Render("Delete marks conversations as not visible and may be hard to recover."))
 	} else {
-		b.WriteString(subtleStyle.Render("Archive hides selected conversations without deleting them."))
+		panel.WriteString(subtleStyle.Render("Archive hides selected conversations without deleting them."))
 	}
-	b.WriteString("\n\n")
-	b.WriteString(helpStyle.Render("y/enter: confirm  n/esc: back"))
-	return b.String()
+	panel.WriteString("\n\n")
+	panel.WriteString(helpStyle.Render("y/enter: confirm  n/esc: back"))
+	return lipgloss.JoinVertical(
+		lipgloss.Left,
+		m.renderChrome(),
+		"",
+		m.renderPanel("confirm", statusPanelStyle.Width(m.contentWidth()).Render(panel.String())),
+		"",
+		m.renderFooterBar("y confirm   n back"),
+	)
 }
 
 func (m Model) renderRunning() string {
-	var b strings.Builder
-	b.WriteString(titleStyle.Render("Processing"))
-	b.WriteString("\n\n")
-	b.WriteString(fmt.Sprintf("Applying %s to %d conversations...\n", strings.ToLower(actionLabels[m.actionCursor]), len(m.selected)))
-	b.WriteString(subtleStyle.Render("Please wait."))
-	return b.String()
+	_, logHeight := m.loadingHeights()
+	panel := lipgloss.JoinVertical(
+		lipgloss.Left,
+		titleStyle.Render("Processing"),
+		"",
+		fmt.Sprintf("Applying %s to %d conversations...", strings.ToLower(actionLabels[m.actionCursor]), len(m.selected)),
+		subtleStyle.Render("Please wait."),
+		"",
+		logViewportStyle.Width(m.contentWidth()).Height(logHeight+2).Render(strings.Join(m.tailLogs(m.contentWidth()-4), "\n")),
+	)
+	return lipgloss.JoinVertical(
+		lipgloss.Left,
+		m.renderChrome(),
+		"",
+		m.renderPanel("processing", statusPanelStyle.Width(m.contentWidth()).Render(panel)),
+		"",
+		m.renderFooterBar("q quit"),
+	)
 }
 
 func (m Model) renderDone() string {
 	if len(m.results) == 0 && len(m.conversations) == 0 {
-		return titleStyle.Render("No conversations found.") + "\n\n" + helpStyle.Render("Press q to quit.")
+		return lipgloss.JoinVertical(
+			lipgloss.Left,
+			m.renderChrome(),
+			"",
+			m.renderPanel("completed", statusPanelStyle.Width(m.contentWidth()).Render("No conversations found.")),
+			"",
+			m.renderFooterBar("q quit"),
+		)
 	}
 
 	successes := 0
@@ -352,25 +396,32 @@ func (m Model) renderDone() string {
 		}
 	}
 
-	var b strings.Builder
-	b.WriteString(titleStyle.Render("Completed"))
-	b.WriteString("\n")
-	b.WriteString(subtleStyle.Render(fmt.Sprintf("%d succeeded, %d failed", successes, len(m.results)-successes)))
-	b.WriteString("\n\n")
+	var panel strings.Builder
+	panel.WriteString(titleStyle.Render("Completed"))
+	panel.WriteString("\n")
+	panel.WriteString(subtleStyle.Render(fmt.Sprintf("%d succeeded, %d failed", successes, len(m.results)-successes)))
+	panel.WriteString("\n\n")
 	for _, result := range m.results {
 		status := successStyle.Render("OK")
 		if result.err != nil {
 			status = errorStyle.Render("FAIL")
 		}
-		b.WriteString(fmt.Sprintf("[%s] %s (%s)", status, result.label, shortID(result.id)))
+		panel.WriteString(fmt.Sprintf("[%s] %s (%s)", status, result.label, shortID(result.id)))
 		if result.err != nil {
-			b.WriteString("\n    " + subtleStyle.Render(result.err.Error()))
+			panel.WriteString("\n    " + subtleStyle.Render(result.err.Error()))
 		}
-		b.WriteString("\n")
+		panel.WriteString("\n")
 	}
-	b.WriteString("\n")
-	b.WriteString(helpStyle.Render("Press enter or q to exit."))
-	return b.String()
+	panel.WriteString("\n")
+	panel.WriteString(helpStyle.Render("Press enter or q to exit."))
+	return lipgloss.JoinVertical(
+		lipgloss.Left,
+		m.renderChrome(),
+		"",
+		m.renderPanel("completed", statusPanelStyle.Width(m.contentWidth()).Render(panel.String())),
+		"",
+		m.renderFooterBar("enter exit   q quit"),
+	)
 }
 
 func renderError(err error) string {
@@ -387,12 +438,163 @@ func renderError(err error) string {
 	return b.String()
 }
 
-func (m Model) frame(content string) string {
-	return docStyle.Width(max(80, m.width)).Render(content)
+func (m Model) renderLoading() string {
+	mainHeight, _ := m.loadingHeights()
+	body := lipgloss.JoinVertical(
+		lipgloss.Left,
+		statusBannerStyle.Width(m.contentWidth()).Render(m.loadingText),
+		"",
+		logViewportStyle.Width(m.contentWidth()).Height(mainHeight).Render(strings.Join(m.tailLogs(m.contentWidth()-4), "\n")),
+	)
+	return lipgloss.JoinVertical(
+		lipgloss.Left,
+		m.renderChrome(),
+		"",
+		m.renderPanel("auth(session)", body),
+		"",
+		m.renderFooterBar("q quit"),
+	)
+}
+
+func (m Model) renderError() string {
+	_, logHeight := m.loadingHeights()
+	errBody := lipgloss.JoinVertical(
+		lipgloss.Left,
+		statusPanelStyle.BorderForeground(lipgloss.Color("#FF7B72")).Width(m.contentWidth()).Render(renderError(m.err)),
+		"",
+		logViewportStyle.Width(m.contentWidth()).Height(logHeight).Render(strings.Join(m.tailLogs(m.contentWidth()-4), "\n")),
+	)
+	return lipgloss.JoinVertical(
+		lipgloss.Left,
+		m.renderChrome(),
+		"",
+		m.renderPanel("error", errBody),
+		"",
+		m.renderFooterBar("enter exit   q quit"),
+	)
+}
+
+func (m Model) renderChrome() string {
+	top := lipgloss.JoinHorizontal(
+		lipgloss.Top,
+		appTitleStyle.Render("bulk-delete-chatgpt-conversations"),
+		"  ",
+		phaseBadgeStyle.Render(m.phaseLabel()),
+	)
+	info := []string{
+		metaKeyStyle.Render("Email: ") + metaValueStyle.Render(valueOrPlaceholder(m.email)),
+		metaKeyStyle.Render("Session: ") + metaValueStyle.Render(valueOrPlaceholder(m.sessionID)),
+		metaKeyStyle.Render("Version: ") + metaValueStyle.Render(valueOrPlaceholder(m.version)),
+		metaKeyStyle.Render("Go: ") + metaValueStyle.Render(runtime.Version()),
+	}
+	rowOne := compactBarStyle.Width(m.contentWidth()).Render(strings.Join(info[:2], "   "))
+	rowTwo := compactBarStyle.Width(m.contentWidth()).Render(strings.Join(info[2:], "   "))
+	return lipgloss.JoinVertical(lipgloss.Left, top, rowOne, rowTwo)
+}
+
+func (m Model) renderConversationTable(height int) string {
+	visible := m.visibleRange()
+	headers := []string{"Select", "Conversation Title", "Date", "Age"}
+	contentWidth := m.contentWidth() - 2
+	widths := []int{10, max(24, contentWidth-38), 14, 8}
+
+	var rows []string
+	rows = append(rows, tableHeaderStyle.Render(
+		formatTableRow(widths, headers[0], headers[1], headers[2], headers[3]),
+	))
+
+	for i := visible.start; i < visible.end; i++ {
+		conv := m.conversations[i]
+		cursor := " "
+		if i == m.cursor {
+			cursor = ">"
+		}
+		mark := " "
+		if _, ok := m.selected[conv.ID]; ok {
+			mark = "x"
+		}
+		date := ""
+		if !conv.UpdateTime.IsZero() {
+			date = conv.UpdateTime.Local().Format("2006-01-02")
+		}
+		selector := cursor + " [" + mark + "]"
+		row := formatTableRow(
+			widths,
+			selector,
+			trim(displayTitle(conv), widths[1]),
+			date,
+			ageString(conv.UpdateTime.Time),
+		)
+		if i == m.cursor {
+			rows = append(rows, selectedRowStyle.Render(row))
+		} else {
+			rows = append(rows, tableRowStyle.Render(row))
+		}
+	}
+
+	tableBody := strings.Join(rows, "\n")
+	return tableBoxStyle.Height(height).Width(contentWidth).Render(tableBody)
+}
+
+func trim(value string, width int) string {
+	runes := []rune(value)
+	if len(runes) <= width {
+		return value
+	}
+	if width <= 1 {
+		return string(runes[:width])
+	}
+	return string(runes[:width-1]) + "…"
+}
+
+func pad(value string, width int) string {
+	if width <= 0 {
+		return value
+	}
+	return lipgloss.NewStyle().Width(width).Render(value)
+}
+
+func ageString(updated time.Time) string {
+	if updated.IsZero() {
+		return "-"
+	}
+	d := time.Since(updated)
+	switch {
+	case d < 24*time.Hour:
+		return fmt.Sprintf("%dh", int(d.Hours()))
+	case d < 30*24*time.Hour:
+		return fmt.Sprintf("%dd", int(d.Hours()/24))
+	case d < 365*24*time.Hour:
+		return fmt.Sprintf("%dmo", int(d.Hours()/(24*30)))
+	default:
+		return fmt.Sprintf("%dyr", int(d.Hours()/(24*365)))
+	}
+}
+
+func valueOrPlaceholder(value string) string {
+	if strings.TrimSpace(value) == "" {
+		return "Waiting..."
+	}
+	return value
+}
+
+func (m Model) tailLogs(width int) []string {
+	if width <= 0 {
+		width = 120
+	}
+	wrapped := make([]string, 0, len(m.logs))
+	for _, line := range m.logs {
+		wrapped = append(wrapped, wrapLines(line, width)...)
+	}
+	if len(wrapped) <= 8 {
+		return wrapped
+	}
+	return wrapped[len(wrapped)-8:]
 }
 
 func (m Model) visibleRange() struct{ start, end int } {
-	maxItems := max(8, m.height-8)
+	tableHeight, _ := m.bodyHeights()
+	maxItems := max(8, tableHeight-1)
 	if len(m.conversations) <= maxItems {
 		return struct{ start, end int }{0, len(m.conversations)}
 	}
@@ -428,6 +630,17 @@ func titleFor(conv chatgpt.Conversation) string {
 	return fmt.Sprintf("%s [%s] %s", title, shortID(conv.ID), strings.Join(stamps, " • "))
 }
 
+func displayTitle(conv chatgpt.Conversation) string {
+	title := strings.TrimSpace(conv.Title)
+	if title == "" {
+		title = "(untitled conversation)"
+	}
+	if conv.IsArchived {
+		return title + " [archived]"
+	}
+	return title
+}
+
 func shortID(id string) string {
 	if len(id) <= 8 {
 		return id
@@ -459,9 +672,14 @@ func loadConversationsCmd(client *chatgpt.Client) tea.Cmd {
 	}
 }
 
-func pollStatusCmd(client *chatgpt.Client) tea.Cmd {
+func pollSnapshotCmd(client *chatgpt.Client) tea.Cmd {
 	return tea.Tick(400*time.Millisecond, func(time.Time) tea.Msg {
-		return statusMsg(client.Status())
+		return snapshotMsg{
+			status:    client.Status(),
+			logs:      client.Logs(),
+			email:     client.UserEmail(),
+			sessionID: client.SessionIDLabel(),
+		}
 	})
 }
 
@@ -490,12 +708,144 @@ func runBulkActionCmd(client *chatgpt.Client, conversations []chatgpt.Conversati
 }
 
 var (
-	docStyle          = lipgloss.NewStyle().Padding(1, 2)
-	titleStyle        = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("12"))
-	subtleStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
-	selectedLineStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("10")).Bold(true)
-	helpStyle         = lipgloss.NewStyle().Foreground(lipgloss.Color("7"))
-	warningStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("11"))
-	errorStyle        = lipgloss.NewStyle().Foreground(lipgloss.Color("9")).Bold(true)
-	successStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("10")).Bold(true)
+	baseAppStyle      = lipgloss.NewStyle().Padding(1, 1).Background(lipgloss.Color("#1A1826")).Foreground(lipgloss.Color("#D8D6EA"))
+	appTitleStyle     = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#F4B942"))
+	phaseBadgeStyle   = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#1A1826")).Background(lipgloss.Color("#5FD7FF")).Padding(0, 1)
+	metaKeyStyle      = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#F4B942"))
+	metaValueStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("#D8D6EA"))
+	compactBarStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("#D8D6EA"))
+	titleStyle        = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#5FD7FF"))
+	subtleStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("#8A88A8"))
+	selectedLineStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#7FFFD4")).Bold(true)
+	helpStyle         = lipgloss.NewStyle().Foreground(lipgloss.Color("#A8A3C2"))
+	warningStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("#F7C95C"))
+	errorStyle        = lipgloss.NewStyle().Foreground(lipgloss.Color("#FF7B72")).Bold(true)
+	successStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("#6AE3A8")).Bold(true)
+	cardTitleStyle    = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#5FD7FF"))
+	statusPanelStyle  = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("#5FD7FF")).Padding(1, 2)
+	statusBannerStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#6AE3A8")).Bold(true)
+	logViewportStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("#D8D6EA"))
+	panelStyle        = lipgloss.NewStyle().Border(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color("#7FDBFF")).Padding(0, 1)
+	panelTitleStyle   = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#5FD7FF"))
+	tableMetaStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("#8A88A8"))
+	tableBoxStyle     = lipgloss.NewStyle()
+	tableHeaderStyle  = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#F3F0FF"))
+	tableRowStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("#8BD5FF"))
+	selectedRowStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("#1A1826")).Background(lipgloss.Color("#C084FC")).Bold(true)
+	footerStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("#1A1826")).Background(lipgloss.Color("#F4B942")).Padding(0, 1)
 )
+
+func (m Model) bodyHeights() (int, int) {
+	if m.height <= 0 {
+		return 12, 8
+	}
+	headerHeight := lipgloss.Height(m.renderChrome())
+	available := m.height - headerHeight - 8
+	logHeight := min(8, max(6, available/3))
+	tableHeight := max(10, available-logHeight)
+	return tableHeight, logHeight
+}
+
+func (m Model) loadingHeights() (int, int) {
+	if m.height <= 0 {
+		return 10, 8
+	}
+	headerHeight := lipgloss.Height(m.renderChrome())
+	available := m.height - headerHeight - 8
+	logHeight := min(8, max(6, available/3))
+	mainHeight := max(10, available-logHeight-2)
+	return mainHeight, logHeight
+}
+
+func (m Model) contentWidth() int {
+	if m.width <= 0 {
+		return 100
+	}
+	return max(72, m.width-4)
+}
+
+func (m Model) renderPanel(title, body string) string {
+	return panelStyle.Width(m.contentWidth()).Render(
+		lipgloss.JoinVertical(lipgloss.Left, panelTitleStyle.Render(title), body),
+	)
+}
+
+func (m Model) renderFooterBar(text string) string {
+	return footerStyle.Width(m.contentWidth()).Render(text)
+}
+
+func (m Model) phaseLabel() string {
+	switch m.phase {
+	case phaseLoading:
+		return "loading"
+	case phaseSelect:
+		return "select"
+	case phaseAction:
+		return "action"
+	case phaseConfirm:
+		return "confirm"
+	case phaseRunning:
+		return "running"
+	case phaseDone:
+		return "done"
+	case phaseError:
+		return "error"
+	default:
+		return "idle"
+	}
+}
+
+func formatTableRow(widths []int, values ...string) string {
+	parts := make([]string, 0, len(values))
+	for i, value := range values {
+		parts = append(parts, pad(value, widths[i]))
+	}
+	return strings.Join(parts, " ")
+}
+
+func wrapLines(s string, width int) []string {
+	if width <= 0 {
+		return []string{s}
+	}
+	runes := []rune(s)
+	if len(runes) <= width {
+		return []string{s}
+	}
+	lines := make([]string, 0, (len(runes)/width)+1)
+	for len(runes) > width {
+		lines = append(lines, string(runes[:width]))
+		runes = runes[width:]
+	}
+	if len(runes) > 0 {
+		lines = append(lines, string(runes))
+	}
+	return lines
+}
+
+func isQuitKey(msg tea.KeyPressMsg) bool {
+	return msg.String() == "ctrl+c" || msg.String() == "q"
+}
+
+func isBackKey(msg tea.KeyPressMsg) bool {
+	return msg.Code == tea.KeyEscape || msg.String() == "esc"
+}
+
+func isConfirmKey(msg tea.KeyPressMsg) bool {
+	return msg.Code == tea.KeyEnter || msg.Code == tea.KeyReturn || msg.String() == "enter"
+}
+
+func isUpKey(msg tea.KeyPressMsg) bool {
+	return msg.Code == tea.KeyUp || msg.String() == "k" || msg.String() == "up"
+}
+
+func isDownKey(msg tea.KeyPressMsg) bool {
+	return msg.Code == tea.KeyDown || msg.String() == "j" || msg.String() == "down"
+}
+
+func isToggleKey(msg tea.KeyPressMsg) bool {
+	return msg.Code == tea.KeySpace || msg.String() == " " || msg.String() == "space"
+}
+
+func matchesRune(msg tea.KeyPressMsg, want string) bool {
+	return strings.EqualFold(msg.String(), want)
+}
