@@ -3,3 +3,4 @@ chatgpt-bulk.exe
 dist/
 *.log
 *.tmp
+*.env

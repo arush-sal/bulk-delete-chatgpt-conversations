@@ -68,6 +68,42 @@ const (
 
 var sortLabels = []string{"Date ↓", "Date ↑", "Title A-Z", "Title Z-A"}
 
+
+var (
+	baseAppStyle       = lipgloss.NewStyle().PaddingTop(1).PaddingLeft(1).PaddingRight(1).PaddingBottom(0).Background(lipgloss.Color("#1A1826")).Foreground(lipgloss.Color("#D8D6EA"))
+	appTitleStyle      = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#F4B942"))
+	phaseBadgeStyle    = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#1A1826")).Background(lipgloss.Color("#5FD7FF")).Padding(0, 1)
+	metaKeyStyle       = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#F4B942"))
+	metaValueStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("#D8D6EA"))
+	headerBoxStyle     = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("#5FD7FF")).Padding(0, 1)
+	headerSepStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("#5A5878"))
+	headerDividerStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#5A5878")).Border(lipgloss.Border{Bottom: "─"}).BorderForeground(lipgloss.Color("#5A5878"))
+	titleStyle         = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#5FD7FF"))
+	subtleStyle        = lipgloss.NewStyle().Foreground(lipgloss.Color("#8A88A8"))
+	selectedLineStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("#7FFFD4")).Bold(true)
+	helpStyle          = lipgloss.NewStyle().Foreground(lipgloss.Color("#A8A3C2"))
+	warningStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("#F7C95C"))
+	errorStyle         = lipgloss.NewStyle().Foreground(lipgloss.Color("#FF7B72")).Bold(true)
+	successStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("#6AE3A8")).Bold(true)
+	statusPanelStyle   = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("#5FD7FF")).Padding(1, 2)
+	errorBoxStyle      = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("#FF7B72")).Padding(1, 2)
+	statusBannerStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("#6AE3A8")).Bold(true)
+	logViewportStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("#D8D6EA"))
+	panelStyle         = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("#5FD7FF")).Padding(0, 1)
+	panelTitleStyle    = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#5FD7FF"))
+	tableMetaStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("#8A88A8"))
+	tableBoxStyle      = lipgloss.NewStyle()
+	tableHeaderStyle   = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#F3F0FF")).Underline(true)
+	tableRowStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("#8BD5FF"))
+	selectedRowStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("#1A1826")).Background(lipgloss.Color("#C084FC")).Bold(true)
+	filterStyle        = lipgloss.NewStyle().Foreground(lipgloss.Color("#8A88A8")).PaddingLeft(1)
+	filterActiveStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("#F4B942")).Bold(true).PaddingLeft(1)
+	shortcutRowStyle   = lipgloss.NewStyle()
+	shortcutKeyStyle   = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#F4B942"))
+	shortcutDescStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("#8A88A8"))
+)
+
+
 // Model owns the full TUI state machine: auth/loading, selection, confirmation,
 // bulk execution, and the final result screen.
 type Model struct {
@@ -585,7 +621,7 @@ func (m Model) renderChrome() string {
 	infoItems := []string{
 		metaKeyStyle.Render("Email ") + metaValueStyle.Render(valueOrPlaceholder(m.email)),
 		metaKeyStyle.Render("Session ") + metaValueStyle.Render(valueOrPlaceholder(m.sessionID)),
-		metaKeyStyle.Render("v") + metaValueStyle.Render(valueOrPlaceholder(m.version)),
+		metaKeyStyle.Render("") + metaValueStyle.Render(valueOrPlaceholder(m.version)),
 		metaKeyStyle.Render("Go ") + metaValueStyle.Render(runtime.Version()),
 	}
 	infoRow := strings.Join(infoItems, sep)
@@ -823,40 +859,6 @@ func runBulkActionCmd(client *chatgpt.Client, conversations []chatgpt.Conversati
 		return actionFinishedMsg{results: results}
 	}
 }
-
-var (
-	baseAppStyle       = lipgloss.NewStyle().PaddingTop(1).PaddingLeft(1).PaddingRight(1).PaddingBottom(0).Background(lipgloss.Color("#1A1826")).Foreground(lipgloss.Color("#D8D6EA"))
-	appTitleStyle      = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#F4B942"))
-	phaseBadgeStyle    = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#1A1826")).Background(lipgloss.Color("#5FD7FF")).Padding(0, 1)
-	metaKeyStyle       = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#F4B942"))
-	metaValueStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("#D8D6EA"))
-	headerBoxStyle     = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("#5FD7FF")).Padding(0, 1)
-	headerSepStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("#5A5878"))
-	headerDividerStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#5A5878")).Border(lipgloss.Border{Bottom: "─"}).BorderForeground(lipgloss.Color("#5A5878"))
-	titleStyle         = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#5FD7FF"))
-	subtleStyle        = lipgloss.NewStyle().Foreground(lipgloss.Color("#8A88A8"))
-	selectedLineStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("#7FFFD4")).Bold(true)
-	helpStyle          = lipgloss.NewStyle().Foreground(lipgloss.Color("#A8A3C2"))
-	warningStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("#F7C95C"))
-	errorStyle         = lipgloss.NewStyle().Foreground(lipgloss.Color("#FF7B72")).Bold(true)
-	successStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("#6AE3A8")).Bold(true)
-	statusPanelStyle   = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("#5FD7FF")).Padding(1, 2)
-	errorBoxStyle      = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("#FF7B72")).Padding(1, 2)
-	statusBannerStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("#6AE3A8")).Bold(true)
-	logViewportStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("#D8D6EA"))
-	panelStyle         = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("#5FD7FF")).Padding(0, 1)
-	panelTitleStyle    = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#5FD7FF"))
-	tableMetaStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("#8A88A8"))
-	tableBoxStyle      = lipgloss.NewStyle()
-	tableHeaderStyle   = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#F3F0FF")).Underline(true)
-	tableRowStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("#8BD5FF"))
-	selectedRowStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("#1A1826")).Background(lipgloss.Color("#C084FC")).Bold(true)
-	filterStyle        = lipgloss.NewStyle().Foreground(lipgloss.Color("#8A88A8")).PaddingLeft(1)
-	filterActiveStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("#F4B942")).Bold(true).PaddingLeft(1)
-	shortcutRowStyle   = lipgloss.NewStyle()
-	shortcutKeyStyle   = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#F4B942"))
-	shortcutDescStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("#8A88A8"))
-)
 
 func (m Model) contentWidth() int {
 	if m.width <= 0 {
