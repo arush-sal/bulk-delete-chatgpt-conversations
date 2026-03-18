@@ -664,11 +664,9 @@ func resolveChromePath(override string) (string, error) {
 		"/usr/bin/chromium-browser",
 		"/snap/bin/chromium",
 		// macOS
-		"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-		"/Applications/Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary",
+		"/Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome",
+		"/Applications/Google\ Chrome\ Canary.app/Contents/MacOS/Google\ Chrome\ Canary",
 		"/Applications/Chromium.app/Contents/MacOS/Chromium",
-		"/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
-		"/Applications/Brave Browser.app/Contents/MacOS/Brave Browser",
 		// Windows via WSL
 		"/mnt/c/Program Files/Google/Chrome/Application/chrome.exe",
 		"/mnt/c/Program Files (x86)/Google/Chrome/Application/chrome.exe",
