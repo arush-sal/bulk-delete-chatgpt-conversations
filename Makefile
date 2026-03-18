@@ -3,7 +3,7 @@ MODULE    := github.com/arush-sal/bulk-delete-chatgpt-conversations
 CMD       := ./cmd/chatgpt-bulk
 
 OS         := $(shell uname -s | tr A-Z a-z)
-ARCH       := $(shell uname -m)
+ARCH       := $(shell uname -m | sed 's/x86_64/amd64/')
 VERSION    := $(shell git describe --tags --always 2>/dev/null || echo dev)
 GIT_COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
 BUILD_DATE := $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
@@ -16,10 +16,10 @@ LDFLAGS := -X $(MODULE)/internal/version.Version=$(VERSION) \
 
 release:
 	if [ ! -d dist ]; then mkdir dist; fi
-	CGO_ENABLED=0 GOOS=$(OS) $GOARCH=$(ARCH) go build -ldflags "$(LDFLAGS)" -o $(BINARY) $(CMD)
+	CGO_ENABLED=0 GOOS=$(OS) GOARCH=$(ARCH) go build -ldflags "$(LDFLAGS)" -o $(BINARY) $(CMD)
 	tar -czf dist/$(BINARY)_$(VERSION)_$(OS)_$(ARCH).tar.gz \
 		README.md LICENSE $(BINARY)
-	sha256sum dist/$(BINARY)_$(VERSION)_$(OS)_$(ARCH).tar.gz > dist/checksum.txt
+	shasum -a 256 dist/$(BINARY)_$(VERSION)_$(OS)_$(ARCH).tar.gz > dist/checksum.txt
 
 build:
 	go build -ldflags "$(LDFLAGS)" -o $(BINARY) $(CMD)
