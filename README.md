@@ -156,13 +156,13 @@ chatgpt-bulk
 chatgpt-bulk --debug
 
 # Point to a specific browser
-chatgpt-bulk --chrome-path "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser"
+chatgpt-bulk --chrome-path "/Applications/Brave Browser.app"
 
 # Headless mode (no browser window appears)
 chatgpt-bulk --headless
 
 # macOS with Chrome in default location
-chatgpt-bulk --chrome-path "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+chatgpt-bulk --chrome-path "/Applications/Google Chrome.app"
 
 # Linux with Chromium
 chatgpt-bulk --chrome-path /usr/bin/chromium
@@ -272,6 +272,9 @@ If `--chrome-path` is not provided, the app searches these locations automatical
 chatgpt-bulk --chrome-path "/full/path/to/browser"
 ```
 
+On macOS, `--chrome-path` accepts either the `.app` bundle path or the executable inside
+`Contents/MacOS`.
+
 ### macOS: "App is damaged" or Gatekeeper warning
 
 If you download a pre-built binary and macOS blocks it:
@@ -285,7 +288,7 @@ xattr -d com.apple.quarantine ./chatgpt-bulk
 If Chrome is installed but not detected, pass the path explicitly:
 
 ```bash
-chatgpt-bulk --chrome-path "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+chatgpt-bulk --chrome-path "/Applications/Google Chrome.app"
 ```
 
 ### I want more visibility during startup
