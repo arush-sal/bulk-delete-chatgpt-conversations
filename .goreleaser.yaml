@@ -1,0 +1,47 @@
+version: 2
+
+project_name: chatgpt-bulk
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: chatgpt-bulk
+    main: ./cmd/chatgpt-bulk
+    binary: chatgpt-bulk
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: windows
+        goarch: arm64
+    ldflags:
+      - -s -w
+      - -X github.com/arush-sal/bulk-delete-chatgpt-conversations/internal/version.Version={{.Version}}
+      - -X github.com/arush-sal/bulk-delete-chatgpt-conversations/internal/version.GitCommit={{.ShortCommit}}
+      - -X github.com/arush-sal/bulk-delete-chatgpt-conversations/internal/version.BuildDate={{.Date}}
+
+archives:
+  - id: default
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - README.md
+      - LICENSE*
+
+checksum:
+  name_template: "checksums.txt"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"

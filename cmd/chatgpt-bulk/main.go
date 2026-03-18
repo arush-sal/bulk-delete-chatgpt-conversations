@@ -3,11 +3,11 @@ package main
 import (
 	"fmt"
 	"os"
-	"runtime/debug"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/arush-sal/bulk-delete-chatgpt-conversations/internal/chatgpt"
 	"github.com/arush-sal/bulk-delete-chatgpt-conversations/internal/tui"
+	"github.com/arush-sal/bulk-delete-chatgpt-conversations/internal/version"
 	"github.com/spf13/cobra"
 )
 
@@ -21,7 +21,7 @@ var rootCmd = &cobra.Command{
 	Use:     "chatgpt-bulk",
 	Short:   "Bulk delete ChatGPT conversations",
 	Long:    "A TUI application for bulk deleting ChatGPT conversations using browser automation.",
-	Version: versionString(),
+	Version: version.Full(),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		client, err := chatgpt.New(chatgpt.Config{
 			Debug:      debugFlag,
@@ -33,7 +33,7 @@ var rootCmd = &cobra.Command{
 		}
 		defer client.Close()
 
-		program := tea.NewProgram(tui.New(client, versionString()))
+		program := tea.NewProgram(tui.New(client, version.Short()))
 		if _, err := program.Run(); err != nil {
 			return fmt.Errorf("tui error: %w", err)
 		}
@@ -51,15 +51,4 @@ func main() {
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)
 	}
-}
-
-func versionString() string {
-	info, ok := debug.ReadBuildInfo()
-	if !ok {
-		return "dev"
-	}
-	if info.Main.Version != "" && info.Main.Version != "(devel)" {
-		return info.Main.Version
-	}
-	return "dev"
 }
