@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	goruntime "runtime"
 	"strings"
 	"sync"
 	"syscall"
@@ -108,12 +109,12 @@ func New(config Config) (*Client, error) {
 		return nil, errors.New("CHATGPT_SESSION_TOKEN is required")
 	}
 	client := &Client{
-		debug:      config.Debug,
+		debug:        config.Debug,
 		sessionToken: sessionToken,
 		csrfToken:    strings.TrimSpace(os.Getenv("CHATGPT_CSRF_TOKEN")),
-		headless:   config.Headless,
-		chromePath: strings.TrimSpace(config.ChromePath),
-		status:     "Waiting to launch Chrome...",
+		headless:     config.Headless,
+		chromePath:   strings.TrimSpace(config.ChromePath),
+		status:       "Waiting to launch Chrome...",
 	}
 
 	return client, nil
@@ -641,6 +642,14 @@ func ensureSuccess(resp browserResponse, id string) error {
 
 func resolveChromePath(override string) (string, error) {
 	if override = strings.TrimSpace(override); override != "" {
+		if goruntime.GOOS == "darwin" {
+			override = filepath.Clean(override)
+			if appBundle, ok := macAppBundlePath(override); ok {
+				if _, err := os.Stat(appBundle); err == nil {
+					return appBundle, nil
+				}
+			}
+		}
 		return override, nil
 	}
 
@@ -664,9 +673,11 @@ func resolveChromePath(override string) (string, error) {
 		"/usr/bin/chromium-browser",
 		"/snap/bin/chromium",
 		// macOS
-		`/Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome`,
-		`/Applications/Google\ Chrome\ Canary.app/Contents/MacOS/Google\ Chrome\ Canary`,
+		"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+		"/Applications/Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary",
 		"/Applications/Chromium.app/Contents/MacOS/Chromium",
+		"/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
+		"/Applications/Brave Browser.app/Contents/MacOS/Brave Browser",
 		// Windows via WSL
 		"/mnt/c/Program Files/Google/Chrome/Application/chrome.exe",
 		"/mnt/c/Program Files (x86)/Google/Chrome/Application/chrome.exe",
@@ -689,6 +700,22 @@ func wslToWindowsPath(path string) (string, error) {
 	return strings.TrimSpace(string(out)), nil
 }
 
+func macAppBundlePath(chromePath string) (string, bool) {
+	clean := filepath.Clean(chromePath)
+	lower := strings.ToLower(clean)
+	if strings.HasSuffix(lower, ".app") {
+		return clean, true
+	}
+
+	marker := strings.ToLower(".app" + string(filepath.Separator))
+	idx := strings.Index(lower, marker)
+	if idx == -1 {
+		return "", false
+	}
+
+	return clean[:idx+len(".app")], true
+}
+
 func launchDetachedChrome(chromePath string, args []string) error {
 	if strings.HasSuffix(strings.ToLower(chromePath), ".exe") || strings.HasPrefix(chromePath, "/mnt/") {
 		windowsChromePath, err := wslToWindowsPath(chromePath)
@@ -700,6 +727,18 @@ func launchDetachedChrome(chromePath string, args []string) error {
 		cmdArgs = append(cmdArgs, args...)
 		cmd := exec.Command("cmd.exe", cmdArgs...)
 		return cmd.Start()
+	}
+
+	if goruntime.GOOS == "darwin" {
+		if appBundle, ok := macAppBundlePath(chromePath); ok {
+			cmdArgs := []string{"-na", appBundle, "--args"}
+			cmdArgs = append(cmdArgs, args...)
+			cmd := exec.Command("open", cmdArgs...)
+			cmd.Stdin = nil
+			cmd.Stdout = nil
+			cmd.Stderr = nil
+			return cmd.Start()
+		}
 	}
 
 	cmd := exec.Command(chromePath, args...)
