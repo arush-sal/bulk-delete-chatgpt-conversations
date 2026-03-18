@@ -12,6 +12,45 @@ It opens a temporary Chrome window, validates your ChatGPT session there, captur
 - Uses a real browser session up front to avoid the `403`/bot-protection problems common with plain HTTP scripts
 - Shows auth/debug progress directly inside the TUI when `--debug` is enabled
 
+## Authentication
+
+This tool does not use an OpenAI API key. It authenticates against the ChatGPT web backend using your ChatGPT browser cookies and launches Chrome so the requests happen in a real browser context.
+
+Required environment variable:
+
+```bash
+CHATGPT_SESSION_TOKEN=...
+```
+
+Optional:
+
+```bash
+CHATGPT_CSRF_TOKEN=...
+DEBUG=true
+```
+
+To get the session token:
+
+1. Open `https://chatgpt.com` and sign in.
+2. Open browser developer tools.
+3. Go to cookies for `https://chatgpt.com`.
+4. Copy `__Secure-next-auth.session-token`.
+
+## Run
+
+```bash
+cp .env.example .env
+go run ./cmd/chatgpt-bulk
+```
+
+On Windows + WSL, the app will try to launch Chrome from:
+
+- `/mnt/c/Program Files/Google/Chrome/Application/chrome.exe`
+- `/mnt/c/Program Files (x86)/Google/Chrome/Application/chrome.exe`
+- `/mnt/c/Program Files/Microsoft/Edge/Application/msedge.exe`
+
+If your browser is elsewhere, set it through `--chrome-path` flag.
+
 ## How It Works
 
 1. The app launches a temporary Chrome window.

@@ -103,8 +103,14 @@ type browserResponse struct {
 }
 
 func New(config Config) (*Client, error) {
+	sessionToken := strings.TrimSpace(os.Getenv("CHATGPT_SESSION_TOKEN"))
+	if sessionToken == "" {
+		return nil, errors.New("CHATGPT_SESSION_TOKEN is required")
+	}
 	client := &Client{
 		debug:      config.Debug,
+		sessionToken: sessionToken,
+		csrfToken:    strings.TrimSpace(os.Getenv("CHATGPT_CSRF_TOKEN")),
 		headless:   config.Headless,
 		chromePath: strings.TrimSpace(config.ChromePath),
 		status:     "Waiting to launch Chrome...",

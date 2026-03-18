@@ -3,11 +3,14 @@ package main
 import (
 	"fmt"
 	"os"
+	"strconv"
+	"strings"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/arush-sal/bulk-delete-chatgpt-conversations/internal/chatgpt"
 	"github.com/arush-sal/bulk-delete-chatgpt-conversations/internal/tui"
 	"github.com/arush-sal/bulk-delete-chatgpt-conversations/internal/version"
+	"github.com/joho/godotenv"
 	"github.com/spf13/cobra"
 )
 
@@ -23,6 +26,10 @@ var rootCmd = &cobra.Command{
 	Long:    "A TUI application for bulk deleting ChatGPT conversations using browser automation.",
 	Version: version.Full(),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		_ = godotenv.Load()
+		if ! debugFlag {
+			debugFlag = parseBoolEnv("DEBUG")
+		}
 		client, err := chatgpt.New(chatgpt.Config{
 			Debug:      debugFlag,
 			Headless:   headless,
@@ -39,6 +46,12 @@ var rootCmd = &cobra.Command{
 		}
 		return nil
 	},
+}
+
+func parseBoolEnv(key string) bool {
+	v := strings.TrimSpace(strings.ToLower(os.Getenv(key)))
+	ok, err := strconv.ParseBool(v)
+	return err == nil && ok
 }
 
 func init() {
