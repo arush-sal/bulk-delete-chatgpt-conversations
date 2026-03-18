@@ -657,11 +657,19 @@ func resolveChromePath(override string) (string, error) {
 	}
 
 	candidates := []string{
+		// Linux
 		"/usr/bin/google-chrome",
 		"/usr/bin/google-chrome-stable",
 		"/usr/bin/chromium",
 		"/usr/bin/chromium-browser",
 		"/snap/bin/chromium",
+		// macOS
+		"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+		"/Applications/Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary",
+		"/Applications/Chromium.app/Contents/MacOS/Chromium",
+		"/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
+		"/Applications/Brave Browser.app/Contents/MacOS/Brave Browser",
+		// Windows via WSL
 		"/mnt/c/Program Files/Google/Chrome/Application/chrome.exe",
 		"/mnt/c/Program Files (x86)/Google/Chrome/Application/chrome.exe",
 		"/mnt/c/Program Files/Microsoft/Edge/Application/msedge.exe",
@@ -672,7 +680,7 @@ func resolveChromePath(override string) (string, error) {
 		}
 	}
 
-	return "", errors.New("no Chrome/Edge executable found; set CHROME_PATH to a browser executable")
+	return "", errors.New("no Chrome/Edge executable found; pass --chrome-path or install Chrome/Edge in a standard location")
 }
 
 func wslToWindowsPath(path string) (string, error) {
