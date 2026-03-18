@@ -57,6 +57,17 @@ type actionFinishedMsg struct {
 	results []actionResult
 }
 
+type sortMode int
+
+const (
+	sortDateDesc sortMode = iota
+	sortDateAsc
+	sortTitleAsc
+	sortTitleDesc
+)
+
+var sortLabels = []string{"Date ↓", "Date ↑", "Title A-Z", "Title Z-A"}
+
 // Model owns the full TUI state machine: auth/loading, selection, confirmation,
 // bulk execution, and the final result screen.
 type Model struct {
@@ -69,13 +80,17 @@ type Model struct {
 	logs          []string
 	email         string
 	sessionID     string
-	conversations []chatgpt.Conversation
+	conversations []chatgpt.Conversation // original full list
+	filtered      []chatgpt.Conversation // filtered + sorted view
 	cursor        int
 	selected      map[string]struct{}
 	actionCursor  int
 	runningIndex  int
 	results       []actionResult
 	err           error
+	filterText    string
+	filtering     bool // true when filter input is active
+	sortBy        sortMode
 }
 
 func New(client *chatgpt.Client, version string) Model {
@@ -107,6 +122,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.conversations = msg.conversations
+		m.applyFilterAndSort()
 		m.phase = phaseSelect
 		if len(m.conversations) == 0 {
 			m.phase = phaseDone
@@ -149,50 +165,124 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) View() tea.View {
-	var content string
+	w := max(80, m.width)
+	h := max(24, m.height)
+
+	// 1. Render header (fixed)
+	header := m.renderChrome()
+
+	// 3. Render body content (fills remaining space).
+	//    Subtract 1 for the top padding in baseAppStyle (bottom padding is 0).
+	headerH := lipgloss.Height(header)
+	bodyH := h - headerH - 1
+	if bodyH < 0 {
+		bodyH = 0
+	}
+
+	var body string
 	switch m.phase {
 	case phaseLoading:
-		content = m.renderLoading()
+		body = m.renderLoading(bodyH)
 	case phaseSelect:
-		content = m.renderSelection()
+		body = m.renderSelection(bodyH)
 	case phaseAction:
-		content = m.renderActionPicker()
+		body = m.renderActionPicker(bodyH)
 	case phaseConfirm:
-		content = m.renderConfirmation()
+		body = m.renderConfirmation(bodyH)
 	case phaseRunning:
-		content = m.renderRunning()
+		body = m.renderRunning(bodyH)
 	case phaseDone:
-		content = m.renderDone()
+		body = m.renderDone(bodyH)
 	case phaseError:
-		content = m.renderError()
-	default:
-		content = ""
+		body = m.renderError(bodyH)
 	}
-	// Bubble Tea v2 drives fullscreen rendering through the returned View.
-	v := tea.NewView(baseAppStyle.Width(max(80, m.width)).Height(max(24, m.height)).Render(content))
+
+	// The active body view owns its height so the header can absorb shortcuts
+	// and the main panel can consume the remaining terminal space.
+	content := lipgloss.JoinVertical(
+		lipgloss.Left,
+		header,
+		body,
+	)
+
+	v := tea.NewView(baseAppStyle.Width(w).Height(h).Render(content))
 	v.AltScreen = true
 	return v
 }
 
+func (m Model) shortcutHints() string {
+	switch m.phase {
+	case phaseLoading:
+		return "q quit"
+	case phaseSelect:
+		if m.filtering {
+			return "type filter   enter done   esc cancel"
+		}
+		return "j/k move   space mark   a all   / filter   s sort   enter actions   q quit"
+	case phaseAction:
+		return "j/k move   enter choose   esc back"
+	case phaseConfirm:
+		return "y confirm   esc back"
+	case phaseRunning:
+		return "q quit"
+	case phaseDone:
+		return "enter exit   q quit"
+	case phaseError:
+		return "enter exit   q quit"
+	default:
+		return "q quit"
+	}
+}
+
 func (m Model) updateSelection(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	// When filtering is active, handle text input
+	if m.filtering {
+		switch {
+		case isBackKey(msg):
+			m.filtering = false
+		case isConfirmKey(msg):
+			m.filtering = false
+		case msg.Code == tea.KeyBackspace || msg.String() == "backspace":
+			if len(m.filterText) > 0 {
+				m.filterText = m.filterText[:len(m.filterText)-1]
+				m.applyFilterAndSort()
+				m.cursor = 0
+			}
+		default:
+			r := msg.String()
+			if len(r) == 1 || r == " " {
+				m.filterText += r
+				m.applyFilterAndSort()
+				m.cursor = 0
+			}
+		}
+		return m, nil
+	}
+
 	switch {
 	case isQuitKey(msg):
 		return m, tea.Quit
+	case matchesRune(msg, "/"):
+		m.filtering = true
+	case matchesRune(msg, "s"):
+		m.sortBy = (m.sortBy + 1) % 4
+		m.applyFilterAndSort()
+		m.cursor = 0
 	case isUpKey(msg):
 		if m.cursor > 0 {
 			m.cursor--
 		}
 	case isDownKey(msg):
-		if m.cursor < len(m.conversations)-1 {
+		if m.cursor < len(m.filtered)-1 {
 			m.cursor++
 		}
 	case isToggleKey(msg):
 		m.toggleCurrent()
 	case matchesRune(msg, "a"):
-		if len(m.selected) == len(m.conversations) {
+		if len(m.selected) == len(m.filtered) {
 			m.selected = make(map[string]struct{})
 		} else {
-			for _, conv := range m.conversations {
+			for _, conv := range m.filtered {
 				m.selected[conv.ID] = struct{}{}
 			}
 		}
@@ -242,15 +332,62 @@ func (m Model) updateConfirmation(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) toggleCurrent() {
-	if len(m.conversations) == 0 {
+	if len(m.filtered) == 0 {
 		return
 	}
-	id := m.conversations[m.cursor].ID
+	id := m.filtered[m.cursor].ID
 	if _, ok := m.selected[id]; ok {
 		delete(m.selected, id)
 		return
 	}
 	m.selected[id] = struct{}{}
+}
+
+func (m *Model) applyFilterAndSort() {
+	// Filter
+	if m.filterText == "" {
+		m.filtered = make([]chatgpt.Conversation, len(m.conversations))
+		copy(m.filtered, m.conversations)
+	} else {
+		m.filtered = m.filtered[:0]
+		needle := strings.ToLower(m.filterText)
+		for _, conv := range m.conversations {
+			if strings.Contains(strings.ToLower(conv.Title), needle) {
+				m.filtered = append(m.filtered, conv)
+			}
+		}
+	}
+
+	// Sort
+	slices.SortStableFunc(m.filtered, func(a, b chatgpt.Conversation) int {
+		switch m.sortBy {
+		case sortDateAsc:
+			if a.UpdateTime.Equal(b.UpdateTime.Time) {
+				return 0
+			}
+			if a.UpdateTime.Before(b.UpdateTime.Time) {
+				return -1
+			}
+			return 1
+		case sortTitleAsc:
+			return strings.Compare(strings.ToLower(a.Title), strings.ToLower(b.Title))
+		case sortTitleDesc:
+			return strings.Compare(strings.ToLower(b.Title), strings.ToLower(a.Title))
+		default: // sortDateDesc
+			if a.UpdateTime.Equal(b.UpdateTime.Time) {
+				return strings.Compare(strings.ToLower(a.Title), strings.ToLower(b.Title))
+			}
+			if a.UpdateTime.After(b.UpdateTime.Time) {
+				return -1
+			}
+			return 1
+		}
+	})
+
+	// Clamp cursor
+	if m.cursor >= len(m.filtered) {
+		m.cursor = max(0, len(m.filtered)-1)
+	}
 }
 
 func (m Model) selectedAction() actionChoice {
@@ -269,39 +406,41 @@ func (m Model) selectedConversations() []chatgpt.Conversation {
 	return selected
 }
 
-func (m Model) renderSelection() string {
+func (m Model) renderSelection(bodyH int) string {
 	if len(m.conversations) == 0 {
-		return lipgloss.JoinVertical(
-			lipgloss.Left,
-			m.renderChrome(),
-			"",
-			m.renderPanel("Conversations", statusPanelStyle.Width(m.contentWidth()).Render("No conversations found for this account.")),
-			"",
-			m.renderFooterBar("q quit"),
-		)
+		return m.renderPanelSized("Conversations", statusPanelStyle.Width(m.contentWidth()).Render("No conversations found for this account."), bodyH)
 	}
 
-	tableHeight, _ := m.bodyHeights()
-	table := m.renderPanel(
-		fmt.Sprintf("conversations(all)[%d]", len(m.conversations)),
-		lipgloss.JoinVertical(
-			lipgloss.Left,
-			tableMetaStyle.Render(fmt.Sprintf("%d loaded   %d selected   %s", len(m.conversations), len(m.selected), m.phaseLabel())),
-			m.renderConversationTable(tableHeight),
-		),
-	)
+	tableHeight := max(8, bodyH-6) // leave room for meta + panel borders
 
-	return lipgloss.JoinVertical(
-		lipgloss.Left,
-		m.renderChrome(),
-		"",
-		table,
-		"",
-		m.renderFooterBar("j/k move   space mark   a all   enter actions   q quit"),
-	)
+	// Build meta line with filter and sort info
+	metaParts := []string{
+		fmt.Sprintf("%d/%d shown", len(m.filtered), len(m.conversations)),
+		fmt.Sprintf("%d selected", len(m.selected)),
+		fmt.Sprintf("sort: %s", sortLabels[m.sortBy]),
+	}
+	metaLine := tableMetaStyle.Render(strings.Join(metaParts, "   "))
+
+	// Filter bar
+	filterLine := ""
+	if m.filtering {
+		filterLine = filterActiveStyle.Render("/ " + m.filterText + "█")
+	} else if m.filterText != "" {
+		filterLine = filterStyle.Render("/ " + m.filterText)
+	}
+
+	bodyParts := []string{metaLine}
+	if filterLine != "" {
+		bodyParts = append(bodyParts, filterLine)
+		tableHeight -= 1
+	}
+	bodyParts = append(bodyParts, m.renderConversationTable(tableHeight))
+
+	panelTitle := fmt.Sprintf("Conversations [%d]", len(m.filtered))
+	return m.renderPanelSized(panelTitle, lipgloss.JoinVertical(lipgloss.Left, bodyParts...), bodyH)
 }
 
-func (m Model) renderActionPicker() string {
+func (m Model) renderActionPicker(bodyH int) string {
 	var options strings.Builder
 	options.WriteString(titleStyle.Render("Choose Action"))
 	options.WriteString("\n")
@@ -319,19 +458,10 @@ func (m Model) renderActionPicker() string {
 		options.WriteString("\n")
 	}
 
-	options.WriteString("\n")
-	options.WriteString(helpStyle.Render("up/down: move  enter: choose  esc: back"))
-	return lipgloss.JoinVertical(
-		lipgloss.Left,
-		m.renderChrome(),
-		"",
-		m.renderPanel("actions", statusPanelStyle.Width(m.contentWidth()).Render(options.String())),
-		"",
-		m.renderFooterBar("j/k move   enter choose   esc back"),
-	)
+	return m.renderPanelSized("Actions", statusPanelStyle.Width(m.contentWidth()).Render(options.String()), bodyH)
 }
 
-func (m Model) renderConfirmation() string {
+func (m Model) renderConfirmation(bodyH int) string {
 	actionLabel := actionLabels[m.actionCursor]
 	targets := m.selectedConversations()
 
@@ -353,22 +483,11 @@ func (m Model) renderConfirmation() string {
 	} else {
 		panel.WriteString(subtleStyle.Render("Archive hides selected conversations without deleting them."))
 	}
-	panel.WriteString("\n\n")
-	panel.WriteString(helpStyle.Render("y/enter: confirm  n/esc: back"))
-	return lipgloss.JoinVertical(
-		lipgloss.Left,
-		m.renderChrome(),
-		"",
-		m.renderPanel("confirm", statusPanelStyle.Width(m.contentWidth()).Render(panel.String())),
-		"",
-		m.renderFooterBar("y confirm   esc back"),
-	)
+	return m.renderPanelSized("Confirm", statusPanelStyle.Width(m.contentWidth()).Render(panel.String()), bodyH)
 }
 
-func (m Model) renderRunning() string {
-	_, logHeight := m.loadingHeights()
-	// Running keeps recent logs in the main panel so action progress is visible
-	// without reopening the full debug log viewport used during auth/error flows.
+func (m Model) renderRunning(bodyH int) string {
+	logHeight := max(4, bodyH-10)
 	panel := lipgloss.JoinVertical(
 		lipgloss.Left,
 		titleStyle.Render("Processing"),
@@ -376,28 +495,14 @@ func (m Model) renderRunning() string {
 		fmt.Sprintf("Applying %s to %d conversations...", strings.ToLower(actionLabels[m.actionCursor]), len(m.selected)),
 		subtleStyle.Render("Please wait."),
 		"",
-		logViewportStyle.Width(m.contentWidth()).Height(logHeight+2).Render(strings.Join(m.tailLogs(m.contentWidth()-4), "\n")),
+		logViewportStyle.Width(m.contentWidth()).Height(logHeight).Render(strings.Join(m.tailLogs(m.contentWidth()-4), "\n")),
 	)
-	return lipgloss.JoinVertical(
-		lipgloss.Left,
-		m.renderChrome(),
-		"",
-		m.renderPanel("processing", statusPanelStyle.Width(m.contentWidth()).Render(panel)),
-		"",
-		m.renderFooterBar("q quit"),
-	)
+	return m.renderPanelSized("Processing", statusPanelStyle.Width(m.contentWidth()).Render(panel), bodyH)
 }
 
-func (m Model) renderDone() string {
+func (m Model) renderDone(bodyH int) string {
 	if len(m.results) == 0 && len(m.conversations) == 0 {
-		return lipgloss.JoinVertical(
-			lipgloss.Left,
-			m.renderChrome(),
-			"",
-			m.renderPanel("completed", statusPanelStyle.Width(m.contentWidth()).Render("No conversations found.")),
-			"",
-			m.renderFooterBar("q quit"),
-		)
+		return m.renderPanelSized("Completed", statusPanelStyle.Width(m.contentWidth()).Render("No conversations found."), bodyH)
 	}
 
 	successes := 0
@@ -423,19 +528,10 @@ func (m Model) renderDone() string {
 		}
 		panel.WriteString("\n")
 	}
-	panel.WriteString("\n")
-	panel.WriteString(helpStyle.Render("Press enter or q to exit."))
-	return lipgloss.JoinVertical(
-		lipgloss.Left,
-		m.renderChrome(),
-		"",
-		m.renderPanel("completed", statusPanelStyle.Width(m.contentWidth()).Render(panel.String())),
-		"",
-		m.renderFooterBar("enter exit   q quit"),
-	)
+	return m.renderPanelSized("Completed", statusPanelStyle.Width(m.contentWidth()).Render(panel.String()), bodyH)
 }
 
-func renderError(err error) string {
+func renderErrorText(err error) string {
 	var b strings.Builder
 	b.WriteString(titleStyle.Render("Error"))
 	b.WriteString("\n\n")
@@ -449,65 +545,61 @@ func renderError(err error) string {
 	return b.String()
 }
 
-func (m Model) renderLoading() string {
-	mainHeight, _ := m.loadingHeights()
-	// Before the session is ready, the main pane is just status plus recent logs.
+func (m Model) renderLoading(bodyH int) string {
+	logHeight := max(4, bodyH-6)
 	body := lipgloss.JoinVertical(
 		lipgloss.Left,
 		statusBannerStyle.Width(m.contentWidth()).Render(m.loadingText),
 		"",
-		logViewportStyle.Width(m.contentWidth()).Height(mainHeight).Render(strings.Join(m.tailLogs(m.contentWidth()-4), "\n")),
+		logViewportStyle.Width(m.contentWidth()).Height(logHeight).Render(strings.Join(m.tailLogs(m.contentWidth()-4), "\n")),
 	)
-	return lipgloss.JoinVertical(
-		lipgloss.Left,
-		m.renderChrome(),
-		"",
-		m.renderPanel("auth(session)", body),
-		"",
-		m.renderFooterBar("q quit"),
-	)
+	return m.renderPanelSized("Auth", body, bodyH)
 }
 
-func (m Model) renderError() string {
-	_, logHeight := m.loadingHeights()
+func (m Model) renderError(bodyH int) string {
+	logHeight := max(4, bodyH-12)
 	errBody := lipgloss.JoinVertical(
 		lipgloss.Left,
-		statusPanelStyle.BorderForeground(lipgloss.Color("#FF7B72")).Width(m.contentWidth()).Render(renderError(m.err)),
+		statusPanelStyle.BorderForeground(lipgloss.Color("#FF7B72")).Width(m.contentWidth()).Render(renderErrorText(m.err)),
 		"",
 		logViewportStyle.Width(m.contentWidth()).Height(logHeight).Render(strings.Join(m.tailLogs(m.contentWidth()-4), "\n")),
 	)
-	return lipgloss.JoinVertical(
-		lipgloss.Left,
-		m.renderChrome(),
-		"",
-		m.renderPanel("error", errBody),
-		"",
-		m.renderFooterBar("enter exit   q quit"),
-	)
+	return m.renderPanelSized("Error", errBody, bodyH)
 }
 
 func (m Model) renderChrome() string {
-	// Keep the top chrome intentionally dense; the sample design favors a
-	// terminal-status-strip feel over large dashboard cards.
-	top := lipgloss.JoinHorizontal(
-		lipgloss.Top,
-		appTitleStyle.Render("bulk-delete-chatgpt-conversations"),
-		"  ",
-		phaseBadgeStyle.Render(m.phaseLabel()),
-	)
-	info := []string{
-		metaKeyStyle.Render("Email: ") + metaValueStyle.Render(valueOrPlaceholder(m.email)),
-		metaKeyStyle.Render("Session: ") + metaValueStyle.Render(valueOrPlaceholder(m.sessionID)),
-		metaKeyStyle.Render("Version: ") + metaValueStyle.Render(valueOrPlaceholder(m.version)),
-		metaKeyStyle.Render("Go: ") + metaValueStyle.Render(runtime.Version()),
+	w := m.contentWidth()
+
+	// Title row: app name left, phase badge right
+	title := appTitleStyle.Render("bulk-delete-chatgpt-conversations")
+	badge := phaseBadgeStyle.Render(m.phaseLabel())
+	gap := max(0, w-lipgloss.Width(title)-lipgloss.Width(badge)-4)
+	titleRow := title + strings.Repeat(" ", gap) + badge
+
+	// Info row: key-value pairs separated by a dim divider
+	sep := headerSepStyle.Render(" │ ")
+	infoItems := []string{
+		metaKeyStyle.Render("Email ") + metaValueStyle.Render(valueOrPlaceholder(m.email)),
+		metaKeyStyle.Render("Session ") + metaValueStyle.Render(valueOrPlaceholder(m.sessionID)),
+		metaKeyStyle.Render("v") + metaValueStyle.Render(valueOrPlaceholder(m.version)),
+		metaKeyStyle.Render("Go ") + metaValueStyle.Render(runtime.Version()),
 	}
-	rowOne := compactBarStyle.Width(m.contentWidth()).Render(strings.Join(info[:2], "   "))
-	rowTwo := compactBarStyle.Width(m.contentWidth()).Render(strings.Join(info[2:], "   "))
-	return lipgloss.JoinVertical(lipgloss.Left, top, rowOne, rowTwo)
+	infoRow := strings.Join(infoItems, sep)
+	hintRow := m.renderShortcutHints(w - 4)
+
+	content := lipgloss.JoinVertical(
+		lipgloss.Left,
+		titleRow,
+		headerDividerStyle.Width(w-4).Render(""),
+		infoRow,
+		headerDividerStyle.Width(w-4).Render(""),
+		hintRow,
+	)
+	return headerBoxStyle.Width(w).Render(content)
 }
 
 func (m Model) renderConversationTable(height int) string {
-	visible := m.visibleRange()
+	visible := m.visibleRange(height)
 	headers := []string{"Select", "Conversation Title", "Date", "Age"}
 	contentWidth := m.contentWidth() - 2
 	widths := []int{10, max(24, contentWidth-38), 14, 8}
@@ -520,7 +612,7 @@ func (m Model) renderConversationTable(height int) string {
 	// Only render the visible window around the cursor so the pane height stays
 	// stable even when the account has hundreds of conversations.
 	for i := visible.start; i < visible.end; i++ {
-		conv := m.conversations[i]
+		conv := m.filtered[i]
 		cursor := " "
 		if i == m.cursor {
 			cursor = ">"
@@ -610,11 +702,10 @@ func (m Model) tailLogs(width int) []string {
 	return wrapped[len(wrapped)-8:]
 }
 
-func (m Model) visibleRange() struct{ start, end int } {
-	tableHeight, _ := m.bodyHeights()
+func (m Model) visibleRange(tableHeight int) struct{ start, end int } {
 	maxItems := max(8, tableHeight-1)
-	if len(m.conversations) <= maxItems {
-		return struct{ start, end int }{0, len(m.conversations)}
+	if len(m.filtered) <= maxItems {
+		return struct{ start, end int }{0, len(m.filtered)}
 	}
 
 	// Keep the cursor roughly centered until we hit the list boundaries.
@@ -623,8 +714,8 @@ func (m Model) visibleRange() struct{ start, end int } {
 		start = 0
 	}
 	end := start + maxItems
-	if end > len(m.conversations) {
-		end = len(m.conversations)
+	if end > len(m.filtered) {
+		end = len(m.filtered)
 		start = end - maxItems
 	}
 	return struct{ start, end int }{start, end}
@@ -730,57 +821,37 @@ func runBulkActionCmd(client *chatgpt.Client, conversations []chatgpt.Conversati
 }
 
 var (
-	baseAppStyle      = lipgloss.NewStyle().Padding(1, 1).Background(lipgloss.Color("#1A1826")).Foreground(lipgloss.Color("#D8D6EA"))
-	appTitleStyle     = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#F4B942"))
-	phaseBadgeStyle   = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#1A1826")).Background(lipgloss.Color("#5FD7FF")).Padding(0, 1)
-	metaKeyStyle      = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#F4B942"))
-	metaValueStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("#D8D6EA"))
-	compactBarStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("#D8D6EA"))
-	titleStyle        = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#5FD7FF"))
-	subtleStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("#8A88A8"))
-	selectedLineStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#7FFFD4")).Bold(true)
-	helpStyle         = lipgloss.NewStyle().Foreground(lipgloss.Color("#A8A3C2"))
-	warningStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("#F7C95C"))
-	errorStyle        = lipgloss.NewStyle().Foreground(lipgloss.Color("#FF7B72")).Bold(true)
-	successStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("#6AE3A8")).Bold(true)
-	cardTitleStyle    = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#5FD7FF"))
-	statusPanelStyle  = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("#5FD7FF")).Padding(1, 2)
-	statusBannerStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#6AE3A8")).Bold(true)
-	logViewportStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("#D8D6EA"))
-	panelStyle        = lipgloss.NewStyle().Border(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color("#7FDBFF")).Padding(0, 1)
-	panelTitleStyle   = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#5FD7FF"))
-	tableMetaStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("#8A88A8"))
-	tableBoxStyle     = lipgloss.NewStyle()
-	tableHeaderStyle  = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#F3F0FF"))
-	tableRowStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("#8BD5FF"))
-	selectedRowStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("#1A1826")).Background(lipgloss.Color("#C084FC")).Bold(true)
-	footerStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("#1A1826")).Background(lipgloss.Color("#F4B942")).Padding(0, 1)
+	baseAppStyle       = lipgloss.NewStyle().PaddingTop(1).PaddingLeft(1).PaddingRight(1).PaddingBottom(0).Background(lipgloss.Color("#1A1826")).Foreground(lipgloss.Color("#D8D6EA"))
+	appTitleStyle      = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#F4B942"))
+	phaseBadgeStyle    = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#1A1826")).Background(lipgloss.Color("#5FD7FF")).Padding(0, 1)
+	metaKeyStyle       = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#F4B942"))
+	metaValueStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("#D8D6EA"))
+	headerBoxStyle     = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("#5FD7FF")).Padding(0, 1)
+	headerSepStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("#5A5878"))
+	headerDividerStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#5A5878")).Border(lipgloss.Border{Bottom: "─"}).BorderForeground(lipgloss.Color("#5A5878"))
+	titleStyle         = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#5FD7FF"))
+	subtleStyle        = lipgloss.NewStyle().Foreground(lipgloss.Color("#8A88A8"))
+	selectedLineStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("#7FFFD4")).Bold(true)
+	helpStyle          = lipgloss.NewStyle().Foreground(lipgloss.Color("#A8A3C2"))
+	warningStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("#F7C95C"))
+	errorStyle         = lipgloss.NewStyle().Foreground(lipgloss.Color("#FF7B72")).Bold(true)
+	successStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("#6AE3A8")).Bold(true)
+	statusPanelStyle   = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("#5FD7FF")).Padding(1, 2)
+	statusBannerStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("#6AE3A8")).Bold(true)
+	logViewportStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("#D8D6EA"))
+	panelStyle         = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("#5FD7FF")).Padding(0, 1)
+	panelTitleStyle    = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#5FD7FF"))
+	tableMetaStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("#8A88A8"))
+	tableBoxStyle      = lipgloss.NewStyle()
+	tableHeaderStyle   = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#F3F0FF")).Underline(true)
+	tableRowStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("#8BD5FF"))
+	selectedRowStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("#1A1826")).Background(lipgloss.Color("#C084FC")).Bold(true)
+	filterStyle        = lipgloss.NewStyle().Foreground(lipgloss.Color("#8A88A8")).PaddingLeft(1)
+	filterActiveStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("#F4B942")).Bold(true).PaddingLeft(1)
+	shortcutRowStyle   = lipgloss.NewStyle()
+	shortcutKeyStyle   = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#F4B942"))
+	shortcutDescStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("#8A88A8"))
 )
-
-func (m Model) bodyHeights() (int, int) {
-	if m.height <= 0 {
-		return 12, 8
-	}
-	headerHeight := lipgloss.Height(m.renderChrome())
-	available := m.height - headerHeight - 8
-	// The selection view gives most of the terminal to the table and reserves a
-	// smaller slice for transient log-bearing states.
-	logHeight := min(8, max(6, available/3))
-	tableHeight := max(10, available-logHeight)
-	return tableHeight, logHeight
-}
-
-func (m Model) loadingHeights() (int, int) {
-	if m.height <= 0 {
-		return 10, 8
-	}
-	headerHeight := lipgloss.Height(m.renderChrome())
-	available := m.height - headerHeight - 8
-	// Loading/error/running panes need a little more room for wrapped log lines.
-	logHeight := min(8, max(6, available/3))
-	mainHeight := max(10, available-logHeight-2)
-	return mainHeight, logHeight
-}
 
 func (m Model) contentWidth() int {
 	if m.width <= 0 {
@@ -795,11 +866,41 @@ func (m Model) renderPanel(title, body string) string {
 	)
 }
 
-func (m Model) renderFooterBar(text string) string {
-	// Shortcuts are packed into one line when possible and spill into a second
-	// line on narrower terminals instead of growing the footer vertically.
-	lines := layoutFooterLines(splitFooterItems(text), m.contentWidth()-2)
-	return footerStyle.Width(m.contentWidth()).Render(strings.Join(lines, "\n"))
+func (m Model) renderPanelSized(title, body string, height int) string {
+	if height <= 0 {
+		return m.renderPanel(title, body)
+	}
+	// panelStyle has a RoundedBorder (1 line top + 1 line bottom) so the
+	// content height must be reduced by 2 to keep the total rendered
+	// height equal to the requested height.
+	contentH := height - 2
+	if contentH < 1 {
+		contentH = 1
+	}
+	return panelStyle.Width(m.contentWidth()).Height(contentH).Render(
+		lipgloss.JoinVertical(lipgloss.Left, panelTitleStyle.Render(title), body),
+	)
+}
+
+func (m Model) renderShortcutHints(width int) string {
+	items := splitFooterItems(m.shortcutHints())
+	var formatted []string
+	for _, item := range items {
+		parts := strings.SplitN(item, " ", 2)
+		if len(parts) == 2 {
+			formatted = append(formatted, shortcutKeyStyle.Render("<"+parts[0]+">")+shortcutDescStyle.Render(parts[1]))
+		} else {
+			formatted = append(formatted, shortcutKeyStyle.Render("<"+item+">"))
+		}
+	}
+	content := strings.Join(formatted, "  ")
+	if lipgloss.Width(content) > width {
+		mid := len(formatted) / 2
+		line1 := strings.Join(formatted[:mid], "  ")
+		line2 := strings.Join(formatted[mid:], "  ")
+		content = line1 + "\n" + line2
+	}
+	return shortcutRowStyle.Width(width).Render(content)
 }
 
 func (m Model) phaseLabel() string {
@@ -860,43 +961,6 @@ func splitFooterItems(text string) []string {
 		}
 	}
 	return items
-}
-
-func layoutFooterLines(items []string, width int) []string {
-	if len(items) == 0 {
-		return []string{""}
-	}
-	if width <= 0 {
-		return []string{strings.Join(items, "  ")}
-	}
-	separator := " • "
-	line1 := ""
-	line2 := ""
-	for _, item := range items {
-		candidate := item
-		if line1 != "" {
-			candidate = line1 + separator + item
-		}
-		if lipgloss.Width(candidate) <= width {
-			line1 = candidate
-			continue
-		}
-		if line2 == "" {
-			line2 = item
-			continue
-		}
-		candidate = line2 + separator + item
-		if lipgloss.Width(candidate) <= width {
-			line2 = candidate
-			continue
-		}
-		line2 = trim(candidate, width)
-		break
-	}
-	if line2 == "" {
-		return []string{line1}
-	}
-	return []string{line1, line2}
 }
 
 func isQuitKey(msg tea.KeyPressMsg) bool {
