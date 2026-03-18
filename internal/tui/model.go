@@ -539,7 +539,7 @@ func renderErrorText(err error) string {
 		b.WriteString(errorStyle.Render(err.Error()))
 		b.WriteString("\n\n")
 	}
-	b.WriteString(subtleStyle.Render("Check CHATGPT_SESSION_TOKEN, refresh it from your browser, and try again."))
+	b.WriteString(subtleStyle.Render("Check your internet connection, and try again."))
 	b.WriteString("\n")
 	b.WriteString(helpStyle.Render("Press enter or q to exit."))
 	return b.String()
@@ -557,14 +557,18 @@ func (m Model) renderLoading(bodyH int) string {
 }
 
 func (m Model) renderError(bodyH int) string {
-	logHeight := max(4, bodyH-12)
-	errBody := lipgloss.JoinVertical(
-		lipgloss.Left,
-		statusPanelStyle.BorderForeground(lipgloss.Color("#FF7B72")).Width(m.contentWidth()).Render(renderErrorText(m.err)),
-		"",
-		logViewportStyle.Width(m.contentWidth()).Height(logHeight).Render(strings.Join(m.tailLogs(m.contentWidth()-4), "\n")),
-	)
-	return m.renderPanelSized("Error", errBody, bodyH)
+	var body strings.Builder
+	body.WriteString(errorBoxStyle.Width(m.contentWidth()).Render(renderErrorText(m.err)))
+
+	logs := strings.Join(m.tailLogs(m.contentWidth()-4), "\n")
+	if strings.TrimSpace(logs) != "" {
+		body.WriteString("\n\n")
+		body.WriteString(subtleStyle.Render("Recent logs"))
+		body.WriteString("\n")
+		body.WriteString(logViewportStyle.Width(m.contentWidth()).Render(logs))
+	}
+
+	return m.renderPanelSized("Error", body.String(), bodyH)
 }
 
 func (m Model) renderChrome() string {
@@ -837,6 +841,7 @@ var (
 	errorStyle         = lipgloss.NewStyle().Foreground(lipgloss.Color("#FF7B72")).Bold(true)
 	successStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("#6AE3A8")).Bold(true)
 	statusPanelStyle   = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("#5FD7FF")).Padding(1, 2)
+	errorBoxStyle      = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("#FF7B72")).Padding(1, 2)
 	statusBannerStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("#6AE3A8")).Bold(true)
 	logViewportStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("#D8D6EA"))
 	panelStyle         = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("#5FD7FF")).Padding(0, 1)

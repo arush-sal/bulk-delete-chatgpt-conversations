@@ -12,7 +12,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -55,6 +54,8 @@ type sessionResponse struct {
 
 type Client struct {
 	debug        bool
+	headless     bool
+	chromePath   string
 	sessionToken string
 	csrfToken    string
 	accessToken  string
@@ -75,6 +76,14 @@ type Client struct {
 	logs     []string
 }
 
+type Config struct {
+	SessionToken string
+	CSRFToken    string
+	Debug        bool
+	Headless     bool
+	ChromePath   string
+}
+
 type AuthError struct {
 	StatusCode int
 	Message    string
@@ -93,18 +102,12 @@ type browserResponse struct {
 	Body   json.RawMessage `json:"body"`
 }
 
-func NewFromEnv() (*Client, error) {
-	sessionToken := strings.TrimSpace(os.Getenv("CHATGPT_SESSION_TOKEN"))
-	if sessionToken == "" {
-		return nil, errors.New("CHATGPT_SESSION_TOKEN is required")
-	}
-
-	debug := parseBoolEnv("DEBUG")
+func New(config Config) (*Client, error) {
 	client := &Client{
-		debug:        debug,
-		sessionToken: sessionToken,
-		csrfToken:    strings.TrimSpace(os.Getenv("CHATGPT_CSRF_TOKEN")),
-		status:       "Waiting to launch Chrome...",
+		debug:      config.Debug,
+		headless:   config.Headless,
+		chromePath: strings.TrimSpace(config.ChromePath),
+		status:     "Waiting to launch Chrome...",
 	}
 
 	return client, nil
@@ -234,7 +237,7 @@ func (c *Client) ensureReady(ctx context.Context) error {
 }
 
 func (c *Client) startBrowser() error {
-	chromePath, err := resolveChromePath()
+	chromePath, err := resolveChromePath(c.chromePath)
 	if err != nil {
 		return err
 	}
@@ -267,7 +270,7 @@ func (c *Client) startBrowser() error {
 		"--start-maximized",
 		fmt.Sprintf("--user-data-dir=%s", profileArg),
 	}
-	if parseBoolEnv("HEADLESS") {
+	if c.headless {
 		args = append([]string{"--headless=new"}, args...)
 	}
 
@@ -630,9 +633,9 @@ func ensureSuccess(resp browserResponse, id string) error {
 	return fmt.Errorf("update conversation %s failed with status %d: %s", id, resp.Status, truncate([]byte(resp.Text), 200))
 }
 
-func resolveChromePath() (string, error) {
-	if envPath := strings.TrimSpace(os.Getenv("CHROME_PATH")); envPath != "" {
-		return envPath, nil
+func resolveChromePath(override string) (string, error) {
+	if override = strings.TrimSpace(override); override != "" {
+		return override, nil
 	}
 
 	pathCandidates := []string{
@@ -754,12 +757,6 @@ func (c *Client) reattachToLivePage() error {
 
 	c.browserCtx, c.browserStop = chromedp.NewContext(c.allocCtx, chromedp.WithTargetID(chosen))
 	return nil
-}
-
-func parseBoolEnv(key string) bool {
-	v := strings.TrimSpace(strings.ToLower(os.Getenv(key)))
-	ok, err := strconv.ParseBool(v)
-	return err == nil && ok
 }
 
 func (c *Client) debugf(format string, args ...any) {
