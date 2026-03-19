@@ -68,41 +68,41 @@ const (
 
 var sortLabels = []string{"Date ↓", "Date ↑", "Title A-Z", "Title Z-A"}
 
+const appBg = lipgloss.Color("#1A1826")
 
 var (
-	baseAppStyle       = lipgloss.NewStyle().PaddingTop(1).PaddingLeft(1).PaddingRight(1).PaddingBottom(0).Background(lipgloss.Color("#1A1826")).Foreground(lipgloss.Color("#D8D6EA"))
-	appTitleStyle      = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#F4B942"))
-	phaseBadgeStyle    = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#1A1826")).Background(lipgloss.Color("#5FD7FF")).Padding(0, 1)
-	metaKeyStyle       = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#F4B942"))
-	metaValueStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("#D8D6EA"))
-	headerBoxStyle     = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("#5FD7FF")).Padding(0, 1)
-	headerSepStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("#5A5878"))
-	headerDividerStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#5A5878")).Border(lipgloss.Border{Bottom: "─"}).BorderForeground(lipgloss.Color("#5A5878"))
-	titleStyle         = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#5FD7FF"))
-	subtleStyle        = lipgloss.NewStyle().Foreground(lipgloss.Color("#8A88A8"))
-	selectedLineStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("#7FFFD4")).Bold(true)
-	helpStyle          = lipgloss.NewStyle().Foreground(lipgloss.Color("#A8A3C2"))
-	warningStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("#F7C95C"))
-	errorStyle         = lipgloss.NewStyle().Foreground(lipgloss.Color("#FF7B72")).Bold(true)
-	successStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("#6AE3A8")).Bold(true)
-	statusPanelStyle   = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("#5FD7FF")).Padding(1, 2)
-	errorBoxStyle      = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("#FF7B72")).Padding(1, 2)
-	statusBannerStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("#6AE3A8")).Bold(true)
-	logViewportStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("#D8D6EA"))
-	panelStyle         = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("#5FD7FF")).Padding(0, 1)
-	panelTitleStyle    = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#5FD7FF"))
-	tableMetaStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("#8A88A8"))
-	tableBoxStyle      = lipgloss.NewStyle()
-	tableHeaderStyle   = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#F3F0FF")).Underline(true)
-	tableRowStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("#8BD5FF"))
-	selectedRowStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("#1A1826")).Background(lipgloss.Color("#C084FC")).Bold(true)
-	filterStyle        = lipgloss.NewStyle().Foreground(lipgloss.Color("#8A88A8")).PaddingLeft(1)
-	filterActiveStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("#F4B942")).Bold(true).PaddingLeft(1)
-	shortcutRowStyle   = lipgloss.NewStyle()
-	shortcutKeyStyle   = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#F4B942"))
-	shortcutDescStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("#8A88A8"))
+	baseAppStyle       = lipgloss.NewStyle().PaddingTop(1).PaddingLeft(1).PaddingRight(1).PaddingBottom(0).Background(appBg).Foreground(lipgloss.Color("#D8D6EA"))
+	appTitleStyle      = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#F4B942")).Background(appBg)
+	phaseBadgeStyle    = lipgloss.NewStyle().Bold(true).Foreground(appBg).Background(lipgloss.Color("#5FFF8F")).Padding(0, 1)
+	metaKeyStyle       = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#F4B942")).Background(appBg)
+	metaValueStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("#D8D6EA")).Background(appBg)
+	headerBoxStyle     = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("#5FFF8F")).Padding(0, 1).Background(appBg)
+	headerSepStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("#5A5878")).Background(appBg)
+	headerDividerStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#5A5878")).Background(appBg)
+	titleStyle         = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#5FFF8F")).Background(appBg)
+	subtleStyle        = lipgloss.NewStyle().Foreground(lipgloss.Color("#8A88A8")).Background(appBg)
+	selectedLineStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("#7FFFD4")).Bold(true).Background(appBg)
+	helpStyle          = lipgloss.NewStyle().Foreground(lipgloss.Color("#A8A3C2")).Background(appBg)
+	warningStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("#F7C95C")).Background(appBg)
+	errorStyle         = lipgloss.NewStyle().Foreground(lipgloss.Color("#FF7B72")).Bold(true).Background(appBg)
+	successStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("#6AE3A8")).Bold(true).Background(appBg)
+	statusPanelStyle   = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("#5FD7FF")).Padding(1, 2).Background(appBg)
+	errorBoxStyle      = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("#FF7B72")).Padding(1, 2).Background(appBg)
+	statusBannerStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("#6AE3A8")).Bold(true).Background(appBg)
+	logViewportStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("#D8D6EA")).Background(appBg)
+	panelStyle         = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("#5FD7FF")).Padding(0, 1).Background(appBg)
+	panelTitleStyle    = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#5FD7FF")).Background(appBg)
+	tableMetaStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("#8A88A8")).Background(appBg)
+	tableBoxStyle      = lipgloss.NewStyle().Background(appBg)
+	tableHeaderStyle   = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#F3F0FF")).Underline(true).Background(appBg)
+	tableRowStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("#8BD5FF")).Background(appBg)
+	selectedRowStyle   = lipgloss.NewStyle().Foreground(appBg).Background(lipgloss.Color("#C084FC")).Bold(true)
+	filterStyle        = lipgloss.NewStyle().Foreground(lipgloss.Color("#8A88A8")).PaddingLeft(1).Background(appBg)
+	filterActiveStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("#F4B942")).Bold(true).PaddingLeft(1).Background(appBg)
+	shortcutRowStyle   = lipgloss.NewStyle().Background(appBg)
+	shortcutKeyStyle   = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#F4B942")).Background(appBg)
+	shortcutDescStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("#8A88A8")).Background(appBg)
 )
-
 
 // Model owns the full TUI state machine: auth/loading, selection, confirmation,
 // bulk execution, and the final result screen.
@@ -207,10 +207,11 @@ func (m Model) View() tea.View {
 	// 1. Render header (fixed)
 	header := m.renderChrome()
 
-	// 3. Render body content (fills remaining space).
-	//    Subtract 1 for the top padding in baseAppStyle (bottom padding is 0).
+	// 3. Render body content (fills remaining space). Reserve one extra row so
+	// the bottom border of the main panel is not clipped by terminals that
+	// render padding and borders a little differently.
 	headerH := lipgloss.Height(header)
-	bodyH := h - headerH - 1
+	bodyH := h - headerH - 2
 	if bodyH < 0 {
 		bodyH = 0
 	}
@@ -241,7 +242,8 @@ func (m Model) View() tea.View {
 		body,
 	)
 
-	v := tea.NewView(baseAppStyle.Width(w).Height(h).Render(content))
+	// Height(h-1): content area excludes the 1-row top padding.
+	v := tea.NewView(baseAppStyle.Width(w).Height(h - 1).Render(content))
 	v.AltScreen = true
 	return v
 }
@@ -254,7 +256,7 @@ func (m Model) shortcutHints() string {
 		if m.filtering {
 			return "type filter   enter done   esc cancel"
 		}
-		return "j/k move   space mark   a all   / filter   s sort   enter actions   q quit"
+		return "j/k move   pgup/pgdn page   space mark   a all   / filter   s sort   enter actions   q quit"
 	case phaseAction:
 		return "j/k move   enter choose   esc back"
 	case phaseConfirm:
@@ -312,6 +314,10 @@ func (m Model) updateSelection(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if m.cursor < len(m.filtered)-1 {
 			m.cursor++
 		}
+	case isPageUpKey(msg):
+		m.cursor = max(0, m.cursor-m.pageSize())
+	case isPageDownKey(msg):
+		m.cursor = min(len(m.filtered)-1, m.cursor+m.pageSize())
 	case isToggleKey(msg):
 		m.toggleCurrent()
 	case matchesRune(msg, "a"):
@@ -447,7 +453,9 @@ func (m Model) renderSelection(bodyH int) string {
 		return m.renderPanelSized("Conversations", statusPanelStyle.Width(m.contentWidth()).Render("No conversations found for this account."), bodyH)
 	}
 
-	tableHeight := max(8, bodyH-6) // leave room for meta + panel borders
+	// Panel overhead: 2 (borders) + 1 (panelTitle) + 1 (metaLine) = 4 rows.
+	// tableHeight fills the remaining content area exactly.
+	tableHeight := max(8, bodyH-4)
 
 	// Build meta line with filter and sort info
 	metaParts := []string{
@@ -583,10 +591,11 @@ func renderErrorText(err error) string {
 
 func (m Model) renderLoading(bodyH int) string {
 	logHeight := max(4, bodyH-6)
+	separator := lipgloss.NewStyle().Background(appBg).Width(max(1, m.contentWidth()-4)).Render("")
 	body := lipgloss.JoinVertical(
 		lipgloss.Left,
-		statusBannerStyle.Width(m.contentWidth()).Render(m.loadingText),
-		"",
+		statusBannerStyle.Render(m.loadingText),
+		separator,
 		logViewportStyle.Width(m.contentWidth()).Height(logHeight).Render(strings.Join(m.tailLogs(m.contentWidth()-4), "\n")),
 	)
 	return m.renderPanelSized("Auth", body, bodyH)
@@ -610,11 +619,18 @@ func (m Model) renderError(bodyH int) string {
 func (m Model) renderChrome() string {
 	w := m.contentWidth()
 
-	// Title row: app name left, phase badge right
-	title := appTitleStyle.Render("bulk-delete-chatgpt-conversations")
+	innerW := w - 4 // content width inside the header box (border + padding each side)
+	divider := headerDividerStyle.Render(strings.Repeat("─", innerW))
+
+	// Title row: app name left, phase badge right.
+	// Render the badge first to know its width, then fill the remaining width
+	// with the title so lipgloss pads with appBg — no bare gap spaces.
 	badge := phaseBadgeStyle.Render(m.phaseLabel())
-	gap := max(0, w-lipgloss.Width(title)-lipgloss.Width(badge)-4)
-	titleRow := title + strings.Repeat(" ", gap) + badge
+	badgeW := lipgloss.Width(badge)
+	titlePart := lipgloss.NewStyle().Background(appBg).Width(innerW - badgeW).Render(
+		appTitleStyle.Render("bulk-delete-chatgpt-conversations"),
+	)
+	titleRow := titlePart + badge
 
 	// Info row: key-value pairs separated by a dim divider
 	sep := headerSepStyle.Render(" │ ")
@@ -624,15 +640,15 @@ func (m Model) renderChrome() string {
 		metaKeyStyle.Render("") + metaValueStyle.Render(valueOrPlaceholder(m.version)),
 		metaKeyStyle.Render("Go ") + metaValueStyle.Render(runtime.Version()),
 	}
-	infoRow := strings.Join(infoItems, sep)
+	infoRow := lipgloss.NewStyle().Background(appBg).Width(innerW).Render(strings.Join(infoItems, sep))
 	hintRow := m.renderShortcutHints(w - 4)
 
 	content := lipgloss.JoinVertical(
 		lipgloss.Left,
 		titleRow,
-		headerDividerStyle.Width(w-4).Render(""),
+		divider,
 		infoRow,
-		headerDividerStyle.Width(w-4).Render(""),
+		divider,
 		hintRow,
 	)
 	return headerBoxStyle.Width(w).Render(content)
@@ -868,8 +884,14 @@ func (m Model) contentWidth() int {
 }
 
 func (m Model) renderPanel(title, body string) string {
+	innerW := m.contentWidth() - 4 // left/right border + left/right padding
+	if innerW < 1 {
+		innerW = 1
+	}
+	titleLine := panelTitleStyle.Width(innerW).Background(appBg).Render(title)
+
 	return panelStyle.Width(m.contentWidth()).Render(
-		lipgloss.JoinVertical(lipgloss.Left, panelTitleStyle.Render(title), body),
+		lipgloss.JoinVertical(lipgloss.Left, titleLine, body),
 	)
 }
 
@@ -877,15 +899,31 @@ func (m Model) renderPanelSized(title, body string, height int) string {
 	if height <= 0 {
 		return m.renderPanel(title, body)
 	}
-	// panelStyle has a RoundedBorder (1 line top + 1 line bottom) so the
-	// content height must be reduced by 2 to keep the total rendered
-	// height equal to the requested height.
-	contentH := height - 2
-	if contentH < 1 {
-		contentH = 1
+
+	// Constrain only the inner body region. Applying Height to the bordered
+	// style itself can overshoot by a row in some terminals and clip the bottom
+	// border.
+	bodyH := height - 3 // 1 title row + 2 border rows
+	if bodyH < 1 {
+		bodyH = 1
 	}
-	return panelStyle.Width(m.contentWidth()).Height(contentH).Render(
-		lipgloss.JoinVertical(lipgloss.Left, panelTitleStyle.Render(title), body),
+
+	innerW := m.contentWidth() - 4 // left/right border + left/right padding
+	if innerW < 1 {
+		innerW = 1
+	}
+	titleLine := panelTitleStyle.Width(innerW).Background(appBg).Render(title)
+
+	clampedBody := lipgloss.NewStyle().
+		Width(innerW).
+		Height(bodyH).
+		MaxHeight(bodyH).
+		Background(lipgloss.Color("#1A1826")).
+		Foreground(lipgloss.Color("#D8D6EA")).
+		Render(body)
+
+	return panelStyle.Width(m.contentWidth()).Render(
+		lipgloss.JoinVertical(lipgloss.Left, titleLine, clampedBody),
 	)
 }
 
@@ -996,6 +1034,24 @@ func isToggleKey(msg tea.KeyPressMsg) bool {
 	return msg.Code == tea.KeySpace || msg.String() == " " || msg.String() == "space"
 }
 
+func isPageUpKey(msg tea.KeyPressMsg) bool {
+	return msg.Code == tea.KeyPgUp || msg.String() == "pgup"
+}
+
+func isPageDownKey(msg tea.KeyPressMsg) bool {
+	return msg.Code == tea.KeyPgDown || msg.String() == "pgdown"
+}
+
 func matchesRune(msg tea.KeyPressMsg, want string) bool {
 	return strings.EqualFold(msg.String(), want)
+}
+
+// pageSize returns the number of items to skip on PgUp/PgDn, derived from
+// the stored terminal height using the same formula as visibleRange.
+func (m Model) pageSize() int {
+	h := max(24, m.height)
+	// Mirror View(): bodyH accounts for header (~8 rows) and top padding (1).
+	bodyH := h - 8 - 1
+	tableH := max(8, bodyH-4)
+	return max(1, tableH-1) // -1 for the table header row
 }
