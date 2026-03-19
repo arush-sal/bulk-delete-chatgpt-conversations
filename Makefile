@@ -13,7 +13,7 @@ LDFLAGS := -X $(MODULE)/internal/version.Version=$(VERSION) \
            -X $(MODULE)/internal/version.GitCommit=$(GIT_COMMIT) \
            -X $(MODULE)/internal/version.BuildDate=$(BUILD_DATE)
 
-.PHONY: release build install clean fmt vet test snapshot release-dry-run build-all release-all build-amd64 build-arm64 release-amd64 release-arm64
+.PHONY: release build install clean fmt vet test snapshot release-dry-run build-all release-all build-amd64 build-arm64 build-windows release-amd64 release-arm64 release-windows
 
 release:
 	if [ ! -d dist ]; then mkdir dist; fi
@@ -21,6 +21,9 @@ release:
 	tar -czf dist/$(BINARY)_$(VERSION)_$(OS)_$(ARCH).tar.gz \
 		README.md LICENSE $(BINARY)
 	shasum -a 256 dist/$(BINARY)_$(VERSION)_$(OS)_$(ARCH).tar.gz > dist/checksums.txt
+
+build-windows:
+	CGO_ENABLED=0 go build -ldflags "$(LDFLAGS)" -o $(BINARY).exe $(CMD)
 
 build-amd64:
 	CGO_ENABLED=0 GOOS=$(OS) GOARCH=amd64 go build -ldflags "$(LDFLAGS)" -o $(BINARY)_amd64 $(CMD)
@@ -30,19 +33,26 @@ build-arm64:
 
 build-all: build-amd64 build-arm64
 
+release-windows:
+	if [ ! -d dist ]; then mkdir dist; fi
+	CGO_ENABLED=0 go build -ldflags "$(LDFLAGS)" -o $(BINARY).exe $(CMD)
+	tar -czf dist/$(BINARY)_$(VERSION)_windows_amd64.tar.gz \
+		README.md LICENSE $(BINARY).exe
+	sha256sum dist/$(BINARY)_$(VERSION)_windows_amd64.tar.gz >> checksums.txt
+
 release-amd64:
 	if [ ! -d dist ]; then mkdir dist; fi
 	CGO_ENABLED=0 GOOS=$(OS) GOARCH=amd64 go build -ldflags "$(LDFLAGS)" -o $(BINARY) $(CMD)
 	tar -czf dist/$(BINARY)_$(VERSION)_$(OS)_amd64.tar.gz \
 		README.md LICENSE $(BINARY)
-	shasum -a 256 dist/$(BINARY)_$(VERSION)_$(OS)_amd64.tar.gz >> dist/checksums.txt
+	shasum -a 256 dist/$(BINARY)_$(VERSION)_$(OS)_amd64.tar.gz >> checksums.txt
 
 release-arm64:
 	if [ ! -d dist ]; then mkdir dist; fi
 	CGO_ENABLED=0 GOOS=$(OS) GOARCH=arm64 go build -ldflags "$(LDFLAGS)" -o $(BINARY) $(CMD)
 	tar -czf dist/$(BINARY)_$(VERSION)_$(OS)_arm64.tar.gz \
 		README.md LICENSE $(BINARY)
-	shasum -a 256 dist/$(BINARY)_$(VERSION)_$(OS)_arm64.tar.gz >> dist/checksums.txt
+	shasum -a 256 dist/$(BINARY)_$(VERSION)_$(OS)_arm64.tar.gz >> checksums.txt
 
 release-all:
 	if [ ! -d dist ]; then mkdir dist; fi
