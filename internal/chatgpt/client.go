@@ -15,7 +15,6 @@ import (
 	goruntime "runtime"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/chromedp/cdproto/browser"
@@ -260,12 +259,9 @@ func (c *Client) startBrowser() error {
 		return fmt.Errorf("pick debug port: %w", err)
 	}
 	c.debugPort = debugPort
-	profileArg := profileDir
-	if strings.HasSuffix(strings.ToLower(chromePath), ".exe") || strings.HasPrefix(chromePath, "/mnt/") {
-		profileArg, err = wslToWindowsPath(profileDir)
-		if err != nil {
-			return fmt.Errorf("convert browser profile path: %w", err)
-		}
+	profileArg, err := profileDirForBrowser(chromePath, profileDir)
+	if err != nil {
+		return fmt.Errorf("convert browser profile path: %w", err)
 	}
 	args := []string{
 		"https://chatgpt.com/",
@@ -653,11 +649,14 @@ func resolveChromePath(override string) (string, error) {
 		return override, nil
 	}
 
+	// Try PATH-based lookup first.
 	pathCandidates := []string{
 		"google-chrome",
 		"google-chrome-stable",
 		"chromium",
 		"chromium-browser",
+		"chrome",
+		"msedge",
 	}
 	for _, candidate := range pathCandidates {
 		if resolved, err := exec.LookPath(candidate); err == nil {
@@ -665,25 +664,8 @@ func resolveChromePath(override string) (string, error) {
 		}
 	}
 
-	candidates := []string{
-		// Linux
-		"/usr/bin/google-chrome",
-		"/usr/bin/google-chrome-stable",
-		"/usr/bin/chromium",
-		"/usr/bin/chromium-browser",
-		"/snap/bin/chromium",
-		// macOS
-		"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-		"/Applications/Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary",
-		"/Applications/Chromium.app/Contents/MacOS/Chromium",
-		"/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
-		"/Applications/Brave Browser.app/Contents/MacOS/Brave Browser",
-		// Windows via WSL
-		"/mnt/c/Program Files/Google/Chrome/Application/chrome.exe",
-		"/mnt/c/Program Files (x86)/Google/Chrome/Application/chrome.exe",
-		"/mnt/c/Program Files/Microsoft/Edge/Application/msedge.exe",
-	}
-	for _, path := range candidates {
+	// Try platform-specific well-known locations.
+	for _, path := range platformChromeCandidates() {
 		if _, err := os.Stat(path); err == nil {
 			return path, nil
 		}
@@ -692,13 +674,6 @@ func resolveChromePath(override string) (string, error) {
 	return "", errors.New("no Chrome/Edge executable found; pass --chrome-path or install Chrome/Edge in a standard location")
 }
 
-func wslToWindowsPath(path string) (string, error) {
-	out, err := exec.Command("wslpath", "-w", filepath.Clean(path)).Output()
-	if err != nil {
-		return "", err
-	}
-	return strings.TrimSpace(string(out)), nil
-}
 
 func macAppBundlePath(chromePath string) (string, bool) {
 	clean := filepath.Clean(chromePath)
@@ -714,39 +689,6 @@ func macAppBundlePath(chromePath string) (string, bool) {
 	}
 
 	return clean[:idx+len(".app")], true
-}
-
-func launchDetachedChrome(chromePath string, args []string) error {
-	if strings.HasSuffix(strings.ToLower(chromePath), ".exe") || strings.HasPrefix(chromePath, "/mnt/") {
-		windowsChromePath, err := wslToWindowsPath(chromePath)
-		if err != nil {
-			return err
-		}
-
-		cmdArgs := []string{"/C", "start", "", windowsChromePath}
-		cmdArgs = append(cmdArgs, args...)
-		cmd := exec.Command("cmd.exe", cmdArgs...)
-		return cmd.Start()
-	}
-
-	if goruntime.GOOS == "darwin" {
-		if appBundle, ok := macAppBundlePath(chromePath); ok {
-			cmdArgs := []string{"-na", appBundle, "--args"}
-			cmdArgs = append(cmdArgs, args...)
-			cmd := exec.Command("open", cmdArgs...)
-			cmd.Stdin = nil
-			cmd.Stdout = nil
-			cmd.Stderr = nil
-			return cmd.Start()
-		}
-	}
-
-	cmd := exec.Command(chromePath, args...)
-	cmd.Stdin = nil
-	cmd.Stdout = nil
-	cmd.Stderr = nil
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	return cmd.Start()
 }
 
 func (c *Client) closeBrowserSession() {
