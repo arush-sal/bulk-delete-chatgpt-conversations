@@ -1,8 +1,18 @@
-# ChatGPT Bulk Conversation TUI
+<!-- ![Logo](./assets/transparent-background.png) -->
+<p align="center">
+    <img src="./assets/transparent-background.png" alt="logo" height="200" />
+</p>
+
+![GitHub stars](https://img.shields.io/github/stars/arush-sal/bulk-delete-chatgpt-conversations?style=social)
+![GitHub forks](https://img.shields.io/github/forks/arush-sal/bulk-delete-chatgpt-conversations?style=social)
+![License](https://img.shields.io/github/license/arush-sal/bulk-delete-chatgpt-conversations)
+![Last Commit](https://img.shields.io/github/last-commit/arush-sal/bulk-delete-chatgpt-conversations)
+
+<p align="center">
+  <image src="assets/demo-regular.gif" width="780" height="480"/>
+</p>
 
 A browser-assisted Go TUI for cleaning up your ChatGPT history without clicking through the sidebar one conversation at a time.
-
-It opens a temporary Chrome window, validates your ChatGPT session there, captures an access token, closes that browser window automatically, and then lets you bulk archive or bulk delete conversations from a terminal interface.
 
 ## What It Does
 
@@ -11,6 +21,8 @@ It opens a temporary Chrome window, validates your ChatGPT session there, captur
 - Supports bulk archive and bulk delete actions
 - Uses a real browser session up front to avoid the `403`/bot-protection problems common with plain HTTP scripts
 - Shows auth/debug progress directly inside the TUI when `--debug` is enabled
+
+It opens a temporary Chrome window, validates your ChatGPT session there, captures an access token, closes that browser window automatically, and then lets you bulk archive or bulk delete conversations from a terminal interface.
 
 ## Supported Platforms
 
@@ -41,7 +53,13 @@ Download the latest release for your platform from the [Releases](https://github
 | Linux amd64 | `chatgpt-bulk_*_linux_amd64.tar.gz` |
 | Linux arm64 | `chatgpt-bulk_*_linux_arm64.tar.gz` |
 
-**macOS / Linux:**
+**Using [bin](github.com/marcosnils/bin)**
+
+```bash
+bin install github.com/arush-sal/bulk-delete-chatgpt-conversations/
+```
+
+**macOS / Linux/ Windows:**
 
 ```bash
 # Download and extract (replace the filename for your platform)
@@ -80,6 +98,11 @@ make build
 
 This tool does **not** use an OpenAI API key. It authenticates against the ChatGPT web backend using your browser session cookie.
 
+> - Runs locally in your browser.
+> - No extensions required.
+> - No data leaves your machine.
+> - Open source and inspectable.
+
 ### Step 1: Get your session token
 
 1. Open [https://chatgpt.com](https://chatgpt.com) in your browser and sign in.
@@ -91,21 +114,21 @@ This tool does **not** use an OpenAI API key. It authenticates against the ChatG
 
 **Option A: `.env` file (recommended)**
 
-```bash
-cp .env.example .env
-```
+  ```bash
+  cp .env.example .env
+  ```
 
-Edit `.env` and paste your token:
+  Edit `.env` and paste your token:
 
-```
-CHATGPT_SESSION_TOKEN=eyJhbGciOiJkaXIiLCJlbmMiOi...
-```
+  ```bash
+  CHATGPT_SESSION_TOKEN=eyJhbGciOiJkaXIiLCJlbmMiOi...
+  ```
 
 **Option B: Environment variable**
 
-```bash
-export CHATGPT_SESSION_TOKEN="eyJhbGciOiJkaXIiLCJlbmMiOi..."
-```
+  ```bash
+  export CHATGPT_SESSION_TOKEN="eyJhbGciOiJkaXIiLCJlbmMiOi..."
+  ```
 
 ### Optional: CSRF token
 
@@ -128,6 +151,8 @@ Or if running from source:
 ```bash
 go run ./cmd/chatgpt-bulk
 ```
+
+> Make sure to have the `.env` file with `CHATGPT_SESSION_TOKEN` saved in the same folder that you are running the binary from.
 
 ### What happens on launch
 
@@ -233,6 +258,7 @@ This tool does not use an OpenAI API key. It talks to the ChatGPT web backend (`
 If `--chrome-path` is not provided, the app searches these locations automatically:
 
 **macOS (Apple Silicon and Intel):**
+
 - `/Applications/Google Chrome.app/Contents/MacOS/Google Chrome`
 - `/Applications/Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary`
 - `/Applications/Chromium.app/Contents/MacOS/Chromium`
@@ -240,10 +266,12 @@ If `--chrome-path` is not provided, the app searches these locations automatical
 - `/Applications/Brave Browser.app/Contents/MacOS/Brave Browser`
 
 **Linux:**
+
 - `google-chrome`, `google-chrome-stable`, `chromium`, `chromium-browser` (via `$PATH`)
 - `/usr/bin/google-chrome`, `/usr/bin/chromium`, `/snap/bin/chromium`
 
 **Windows via WSL:**
+
 - `/mnt/c/Program Files/Google/Chrome/Application/chrome.exe`
 - `/mnt/c/Program Files (x86)/Google/Chrome/Application/chrome.exe`
 - `/mnt/c/Program Files/Microsoft/Edge/Application/msedge.exe`

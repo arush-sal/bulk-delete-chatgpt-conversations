@@ -657,7 +657,7 @@ func (m Model) renderChrome() string {
 func (m Model) renderConversationTable(height int) string {
 	visible := m.visibleRange(height)
 	headers := []string{"Select", "Conversation Title", "Date", "Age"}
-	contentWidth := m.contentWidth() - 2
+	contentWidth := m.panelInnerWidth()
 	widths := []int{10, max(24, contentWidth-38), 14, 8}
 
 	var rows []string
@@ -878,16 +878,21 @@ func runBulkActionCmd(client *chatgpt.Client, conversations []chatgpt.Conversati
 
 func (m Model) contentWidth() int {
 	if m.width <= 0 {
-		return 100
+		return 80
 	}
 	return max(72, m.width-4)
 }
 
-func (m Model) renderPanel(title, body string) string {
+func (m Model) panelInnerWidth() int {
 	innerW := m.contentWidth() - 4 // left/right border + left/right padding
 	if innerW < 1 {
-		innerW = 1
+		return 1
 	}
+	return innerW
+}
+
+func (m Model) renderPanel(title, body string) string {
+	innerW := m.panelInnerWidth()
 	titleLine := panelTitleStyle.Width(innerW).Background(appBg).Render(title)
 
 	return panelStyle.Width(m.contentWidth()).Render(
@@ -908,10 +913,7 @@ func (m Model) renderPanelSized(title, body string, height int) string {
 		bodyH = 1
 	}
 
-	innerW := m.contentWidth() - 4 // left/right border + left/right padding
-	if innerW < 1 {
-		innerW = 1
-	}
+	innerW := m.panelInnerWidth()
 	titleLine := panelTitleStyle.Width(innerW).Background(appBg).Render(title)
 
 	clampedBody := lipgloss.NewStyle().
