@@ -27,7 +27,7 @@ var rootCmd = &cobra.Command{
 	Version: version.Full(),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		_ = godotenv.Load()
-		if ! debugFlag {
+		if !debugFlag {
 			debugFlag = parseBoolEnv("DEBUG")
 		}
 		client, err := chatgpt.New(chatgpt.Config{
