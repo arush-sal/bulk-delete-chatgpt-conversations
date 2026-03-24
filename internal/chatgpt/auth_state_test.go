@@ -161,6 +161,30 @@ func TestResolveAuthPrefersExplicitConfigOverStoredAndEnv(t *testing.T) {
 	}
 }
 
+func TestResolveAuthIgnoresWhitespaceConfigAndFallsBackToEnv(t *testing.T) {
+	authPath := filepath.Join(t.TempDir(), "auth.json")
+	t.Setenv(authFileEnvVar, authPath)
+	t.Setenv("CHATGPT_SESSION_TOKEN", "env-session")
+	t.Setenv("CHATGPT_CSRF_TOKEN", "env-csrf")
+
+	resolved, err := ResolveAuth(Config{
+		SessionToken: " \t\n ",
+		CSRFToken:    " \t\n ",
+	})
+	if err != nil {
+		t.Fatalf("ResolveAuth() error = %v", err)
+	}
+	if resolved.Source != AuthSourceEnv {
+		t.Fatalf("ResolveAuth() source = %q, want %q", resolved.Source, AuthSourceEnv)
+	}
+	if resolved.State.SessionToken != "env-session" {
+		t.Fatalf("ResolveAuth() session token = %q, want env value after trimming whitespace config", resolved.State.SessionToken)
+	}
+	if resolved.State.CSRFToken != "env-csrf" {
+		t.Fatalf("ResolveAuth() csrf token = %q, want env value after trimming whitespace config", resolved.State.CSRFToken)
+	}
+}
+
 func TestResolveAuthReturnsStoredDecodeError(t *testing.T) {
 	authPath := filepath.Join(t.TempDir(), "auth.json")
 	t.Setenv(authFileEnvVar, authPath)
