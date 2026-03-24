@@ -13,6 +13,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	goruntime "runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -28,6 +29,9 @@ const (
 	chatGPTBaseURL = "https://chatgpt.com"
 	backendAPIURL  = chatGPTBaseURL + "/backend-api"
 	sessionAPIURL  = chatGPTBaseURL + "/api/auth/session"
+	sessionCookie  = "__Secure-next-auth.session-token"
+	csrfCookie     = "__Host-next-auth.csrf-token"
+	cookieChunkLen = 3800
 )
 
 type Conversation struct {
@@ -482,17 +486,19 @@ func pickFreePort() (int, error) {
 
 func (c *Client) seedCookies(ctx context.Context, sessionToken, csrfToken string) error {
 	return chromedp.Run(ctx, chromedp.ActionFunc(func(runCtx context.Context) error {
-		if err := network.SetCookie("__Secure-next-auth.session-token", sessionToken).
-			WithDomain(".chatgpt.com").
-			WithPath("/").
-			WithSecure(true).
-			WithHTTPOnly(true).
-			Do(runCtx); err != nil {
-			return fmt.Errorf("set session cookie: %w", err)
+		for _, cookie := range splitCookieChunks(sessionCookie, sessionToken) {
+			if err := network.SetCookie(cookie.Name, cookie.Value).
+				WithDomain(".chatgpt.com").
+				WithPath("/").
+				WithSecure(true).
+				WithHTTPOnly(true).
+				Do(runCtx); err != nil {
+				return fmt.Errorf("set session cookie %s: %w", cookie.Name, err)
+			}
 		}
 
 		if csrfToken != "" {
-			if err := network.SetCookie("__Host-next-auth.csrf-token", csrfToken).
+			if err := network.SetCookie(csrfCookie, csrfToken).
 				WithDomain("chatgpt.com").
 				WithPath("/").
 				WithSecure(true).
@@ -516,19 +522,11 @@ func (c *Client) initializeHTTPClient() error {
 		return err
 	}
 
-	jar.SetCookies(req.URL, []*http.Cookie{
-		{
-			Name:   "__Secure-next-auth.session-token",
-			Value:  c.sessionToken,
-			Domain: ".chatgpt.com",
-			Path:   "/",
-			Secure: true,
-		},
-	})
+	jar.SetCookies(req.URL, splitCookieChunks(sessionCookie, c.sessionToken))
 	if c.csrfToken != "" {
 		jar.SetCookies(req.URL, []*http.Cookie{
 			{
-				Name:   "__Host-next-auth.csrf-token",
+				Name:   csrfCookie,
 				Value:  c.csrfToken,
 				Path:   "/",
 				Secure: true,
@@ -565,8 +563,15 @@ func (c *Client) applyAuthState(state AuthState) {
 }
 
 func (c *Client) captureAuthState(ctx context.Context, session sessionResponse) (AuthState, error) {
-	cookies, err := network.GetCookies().WithURLs([]string{chatGPTBaseURL}).Do(ctx)
-	if err != nil {
+	cookieCtx, cancel := c.browserCommandContext(ctx)
+	defer cancel()
+
+	var cookies []*network.Cookie
+	if err := chromedp.Run(cookieCtx, chromedp.ActionFunc(func(runCtx context.Context) error {
+		var err error
+		cookies, err = network.GetCookies().WithURLs([]string{chatGPTBaseURL}).Do(runCtx)
+		return err
+	})); err != nil {
 		return AuthState{}, fmt.Errorf("read auth cookies from browser: %w", err)
 	}
 
@@ -577,14 +582,8 @@ func (c *Client) captureAuthState(ctx context.Context, session sessionResponse) 
 		Source:      "browser",
 	}
 
-	for _, cookie := range cookies {
-		switch cookie.Name {
-		case "__Secure-next-auth.session-token":
-			state.SessionToken = strings.TrimSpace(cookie.Value)
-		case "__Host-next-auth.csrf-token":
-			state.CSRFToken = strings.TrimSpace(cookie.Value)
-		}
-	}
+	state.SessionToken = readCookieValue(cookies, sessionCookie)
+	state.CSRFToken = readCookieValue(cookies, csrfCookie)
 
 	if state.SessionToken == "" {
 		return AuthState{}, errors.New("authenticated browser session did not expose a ChatGPT session token")
@@ -594,6 +593,95 @@ func (c *Client) captureAuthState(ctx context.Context, session sessionResponse) 
 	}
 
 	return state, nil
+}
+
+func (c *Client) browserCommandContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	if c.browserCtx == nil {
+		return ctx, func() {}
+	}
+
+	if deadline, ok := ctx.Deadline(); ok {
+		return context.WithDeadline(c.browserCtx, deadline)
+	}
+
+	return context.WithCancel(c.browserCtx)
+}
+
+func readCookieValue(cookies []*network.Cookie, name string) string {
+	chunks := make(map[int]string)
+	exactValue := ""
+	maxChunk := -1
+
+	for _, cookie := range cookies {
+		if cookie == nil {
+			continue
+		}
+
+		cookieName := strings.TrimSpace(cookie.Name)
+		switch {
+		case cookieName == name:
+			exactValue = strings.TrimSpace(cookie.Value)
+		case strings.HasPrefix(cookieName, name+"."):
+			suffix := strings.TrimPrefix(cookieName, name+".")
+			index, err := strconv.Atoi(suffix)
+			if err != nil || index < 0 {
+				continue
+			}
+			chunks[index] = strings.TrimSpace(cookie.Value)
+			if index > maxChunk {
+				maxChunk = index
+			}
+		}
+	}
+
+	if exactValue != "" {
+		return exactValue
+	}
+	if len(chunks) == 0 {
+		return ""
+	}
+
+	var builder strings.Builder
+	for i := 0; i <= maxChunk; i++ {
+		chunk, ok := chunks[i]
+		if !ok {
+			return ""
+		}
+		builder.WriteString(chunk)
+	}
+	return builder.String()
+}
+
+func splitCookieChunks(name, value string) []*http.Cookie {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil
+	}
+	if len(value) <= cookieChunkLen {
+		return []*http.Cookie{{
+			Name:   name,
+			Value:  value,
+			Domain: ".chatgpt.com",
+			Path:   "/",
+			Secure: true,
+		}}
+	}
+
+	var cookies []*http.Cookie
+	for i, start := 0, 0; start < len(value); i, start = i+1, start+cookieChunkLen {
+		end := start + cookieChunkLen
+		if end > len(value) {
+			end = len(value)
+		}
+		cookies = append(cookies, &http.Cookie{
+			Name:   fmt.Sprintf("%s.%d", name, i),
+			Value:  value[start:end],
+			Domain: ".chatgpt.com",
+			Path:   "/",
+			Secure: true,
+		})
+	}
+	return cookies
 }
 
 func (c *Client) retryAuth(ctx context.Context, err error) error {
