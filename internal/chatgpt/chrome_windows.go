@@ -38,13 +38,6 @@ func launchDetachedChrome(chromePath string, args []string) error {
 	return cmd.Start()
 }
 
-// profileDirForBrowser returns the profile directory as-is on native Windows.
 func profileDirForBrowser(_ string, profileDir string) (string, error) {
 	return profileDir, nil
-}
-
-// isWSLOrWindowsExe reports whether the chrome path looks like a Windows
-// executable launched through WSL. Always false on native Windows.
-func isWSLOrWindowsExe(_ string) bool {
-	return false
 }
