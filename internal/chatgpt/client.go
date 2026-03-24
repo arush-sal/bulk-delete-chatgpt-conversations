@@ -60,9 +60,12 @@ type Client struct {
 	csrfToken    string
 	accessToken  string
 	userEmail    string
+	authSource   AuthSource
 	status       string
 	httpClient   *http.Client
 	debugPort    int
+	allowLogin   bool
+	saveAuth     func(AuthState) error
 
 	allocCtx    context.Context
 	allocCancel context.CancelFunc
@@ -79,9 +82,14 @@ type Client struct {
 type Config struct {
 	SessionToken string
 	CSRFToken    string
+	AccessToken  string
+	UserEmail    string
+	AuthSource   AuthSource
 	Debug        bool
 	Headless     bool
 	ChromePath   string
+	AllowLogin   bool
+	SaveAuth     func(AuthState) error
 }
 
 type AuthError struct {
@@ -103,17 +111,27 @@ type browserResponse struct {
 }
 
 func New(config Config) (*Client, error) {
-	sessionToken := strings.TrimSpace(os.Getenv("CHATGPT_SESSION_TOKEN"))
-	if sessionToken == "" {
-		return nil, errors.New("CHATGPT_SESSION_TOKEN is required")
-	}
 	client := &Client{
 		debug:        config.Debug,
-		sessionToken: sessionToken,
-		csrfToken:    strings.TrimSpace(os.Getenv("CHATGPT_CSRF_TOKEN")),
+		sessionToken: strings.TrimSpace(config.SessionToken),
+		csrfToken:    strings.TrimSpace(config.CSRFToken),
+		accessToken:  strings.TrimSpace(config.AccessToken),
+		userEmail:    strings.TrimSpace(config.UserEmail),
+		authSource:   config.AuthSource,
 		headless:     config.Headless,
 		chromePath:   strings.TrimSpace(config.ChromePath),
-		status:       "Waiting to launch Chrome...",
+		allowLogin:   config.AllowLogin,
+		saveAuth:     config.SaveAuth,
+		status:       "Ready",
+	}
+	if client.accessToken != "" {
+		client.status = "Using saved ChatGPT session..."
+	} else if client.sessionToken != "" {
+		client.status = "Using saved ChatGPT cookies..."
+	} else if client.allowLogin {
+		client.status = "Waiting to launch Chrome for ChatGPT login..."
+	} else {
+		client.status = "No ChatGPT auth configured."
 	}
 
 	return client, nil
@@ -147,14 +165,7 @@ func (c *Client) UserEmail() string {
 }
 
 func (c *Client) SessionIDLabel() string {
-	token := strings.TrimSpace(c.sessionToken)
-	if token == "" {
-		return "Unavailable"
-	}
-	if len(token) <= 16 {
-		return token
-	}
-	return token[:8] + "..." + token[len(token)-6:]
+	return MaskToken(c.sessionToken)
 }
 
 func (c *Client) Logs() []string {
@@ -187,7 +198,13 @@ func (c *Client) ListConversations(ctx context.Context, pageSize int) ([]Convers
 		url := fmt.Sprintf("%s/conversations?offset=%d&limit=%d", backendAPIURL, offset, pageSize)
 		respBody, err := c.doBackendRequest(ctx, httpMethodGet, url, nil)
 		if err != nil {
-			return nil, err
+			if retryErr := c.retryAuth(ctx, err); retryErr != nil {
+				return nil, retryErr
+			}
+			respBody, err = c.doBackendRequest(ctx, httpMethodGet, url, nil)
+			if err != nil {
+				return nil, err
+			}
 		}
 		if err := json.Unmarshal(respBody, &page); err != nil {
 			return nil, fmt.Errorf("decode conversations response: %w", err)
@@ -212,6 +229,12 @@ func (c *Client) ArchiveConversation(ctx context.Context, id string) error {
 	}
 
 	_, err := c.doBackendRequest(ctx, httpMethodPatch, backendAPIURL+"/conversation/"+id, map[string]any{"is_archived": true})
+	if err != nil {
+		if retryErr := c.retryAuth(ctx, err); retryErr != nil {
+			return retryErr
+		}
+		_, err = c.doBackendRequest(ctx, httpMethodPatch, backendAPIURL+"/conversation/"+id, map[string]any{"is_archived": true})
+	}
 	return err
 }
 
@@ -224,22 +247,46 @@ func (c *Client) DeleteConversation(ctx context.Context, id string) error {
 	}
 
 	_, err := c.doBackendRequest(ctx, httpMethodPatch, backendAPIURL+"/conversation/"+id, map[string]any{"is_visible": false})
+	if err != nil {
+		if retryErr := c.retryAuth(ctx, err); retryErr != nil {
+			return retryErr
+		}
+		_, err = c.doBackendRequest(ctx, httpMethodPatch, backendAPIURL+"/conversation/"+id, map[string]any{"is_visible": false})
+	}
 	return err
 }
 
 func (c *Client) ensureReady(ctx context.Context) error {
-	if c.browserCtx == nil {
-		c.setStatus("Launching Chrome window...")
-		if err := c.startBrowser(); err != nil {
-			c.Close()
+	if c.httpClient == nil && c.sessionToken != "" {
+		if err := c.initializeHTTPClient(); err != nil {
 			return err
 		}
 	}
 	if c.accessToken != "" {
 		return nil
 	}
+	if c.browserCtx == nil {
+		if c.sessionToken == "" && c.accessToken == "" && !c.allowLogin {
+			return errors.New("no stored ChatGPT auth found and CHATGPT_SESSION_TOKEN is not set; run `chatgpt-bulk login`")
+		}
+		c.setStatus("Launching Chrome window...")
+		if err := c.startBrowser(); err != nil {
+			c.Close()
+			return fmt.Errorf("browser launch failed: %w", err)
+		}
+	}
 	c.setStatus("Waiting for a valid ChatGPT session in Chrome...")
 	return c.waitForAccessToken(ctx)
+}
+
+func (c *Client) Authenticate(ctx context.Context) (AuthState, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if err := c.ensureReady(ctx); err != nil {
+		return AuthState{}, err
+	}
+	return c.currentAuthState(), nil
 }
 
 func (c *Client) startBrowser() error {
@@ -300,10 +347,12 @@ func (c *Client) startBrowser() error {
 		return fmt.Errorf("enable browser network: %w", err)
 	}
 
-	c.debugf("seeding chatgpt cookies")
-	c.setStatus("Applying ChatGPT cookies in Chrome...")
-	if err := c.seedCookies(startCtx, c.sessionToken, c.csrfToken); err != nil {
-		return err
+	if c.sessionToken != "" {
+		c.debugf("seeding chatgpt cookies")
+		c.setStatus("Applying saved ChatGPT cookies in Chrome...")
+		if err := c.seedCookies(startCtx, c.sessionToken, c.csrfToken); err != nil {
+			return err
+		}
 	}
 
 	c.debugf("navigating to %s", chatGPTBaseURL)
@@ -350,10 +399,18 @@ func (c *Client) waitForAccessToken(ctx context.Context) error {
 				return fmt.Errorf("decode session response: %w", err)
 			}
 			if session.AccessToken != "" {
-				c.accessToken = session.AccessToken
-				c.userEmail = strings.TrimSpace(session.User.Email)
+				state, err := c.captureAuthState(deadlineCtx, session)
+				if err != nil {
+					return err
+				}
+				c.applyAuthState(state)
 				if err := c.initializeHTTPClient(); err != nil {
 					return err
+				}
+				if c.saveAuth != nil {
+					if err := c.saveAuth(c.currentAuthState()); err != nil {
+						return fmt.Errorf("auth file write failed: %w", err)
+					}
 				}
 				c.setStatus("Closing temporary Chrome window...")
 				c.closeBrowserSession()
@@ -366,7 +423,7 @@ func (c *Client) waitForAccessToken(ctx context.Context) error {
 
 		select {
 		case <-deadlineCtx.Done():
-			return errors.New("timed out waiting for a valid ChatGPT browser session; if Chrome opened a login page, finish logging in there and rerun the command")
+			return errors.New("session wait timed out: finish signing in or completing any challenge in the browser window, then rerun the command")
 		case <-ticker.C:
 		}
 	}
@@ -482,6 +539,79 @@ func (c *Client) initializeHTTPClient() error {
 	c.httpClient = &http.Client{
 		Jar:     jar,
 		Timeout: 30 * time.Second,
+	}
+	return nil
+}
+
+func (c *Client) currentAuthState() AuthState {
+	return AuthState{
+		SessionToken: c.sessionToken,
+		CSRFToken:    c.csrfToken,
+		AccessToken:  c.accessToken,
+		UserEmail:    c.userEmail,
+		SavedAt:      time.Now().UTC(),
+		Source:       string(c.authSource),
+	}
+}
+
+func (c *Client) applyAuthState(state AuthState) {
+	c.sessionToken = strings.TrimSpace(state.SessionToken)
+	c.csrfToken = strings.TrimSpace(state.CSRFToken)
+	c.accessToken = strings.TrimSpace(state.AccessToken)
+	c.userEmail = strings.TrimSpace(state.UserEmail)
+	if source := strings.TrimSpace(state.Source); source != "" {
+		c.authSource = AuthSource(source)
+	}
+}
+
+func (c *Client) captureAuthState(ctx context.Context, session sessionResponse) (AuthState, error) {
+	cookies, err := network.GetCookies().WithURLs([]string{chatGPTBaseURL}).Do(ctx)
+	if err != nil {
+		return AuthState{}, fmt.Errorf("read auth cookies from browser: %w", err)
+	}
+
+	state := AuthState{
+		AccessToken: strings.TrimSpace(session.AccessToken),
+		UserEmail:   strings.TrimSpace(session.User.Email),
+		SavedAt:     time.Now().UTC(),
+		Source:      "browser",
+	}
+
+	for _, cookie := range cookies {
+		switch cookie.Name {
+		case "__Secure-next-auth.session-token":
+			state.SessionToken = strings.TrimSpace(cookie.Value)
+		case "__Host-next-auth.csrf-token":
+			state.CSRFToken = strings.TrimSpace(cookie.Value)
+		}
+	}
+
+	if state.SessionToken == "" {
+		return AuthState{}, errors.New("authenticated browser session did not expose a ChatGPT session token")
+	}
+	if state.AccessToken == "" {
+		return AuthState{}, errors.New("authenticated browser session did not return an access token")
+	}
+
+	return state, nil
+}
+
+func (c *Client) retryAuth(ctx context.Context, err error) error {
+	var authErr *AuthError
+	if !errors.As(err, &authErr) {
+		return err
+	}
+	if c.sessionToken == "" && !c.allowLogin {
+		return err
+	}
+
+	c.debugf("auth rejected, retrying with browser bootstrap: %v", authErr)
+	c.closeBrowserSession()
+	c.accessToken = ""
+	c.httpClient = nil
+	c.setStatus("Stored ChatGPT auth was rejected. Opening browser to refresh session...")
+	if refreshErr := c.ensureReady(ctx); refreshErr != nil {
+		return refreshErr
 	}
 	return nil
 }
@@ -673,7 +803,6 @@ func resolveChromePath(override string) (string, error) {
 
 	return "", errors.New("no Chrome/Edge executable found; pass --chrome-path or install Chrome/Edge in a standard location")
 }
-
 
 func macAppBundlePath(chromePath string) (string, bool) {
 	clean := filepath.Clean(chromePath)

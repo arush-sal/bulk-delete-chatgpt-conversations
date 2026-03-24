@@ -96,70 +96,77 @@ make build
 
 ## Authentication
 
-This tool does **not** use an OpenAI API key. It authenticates against the ChatGPT web backend using your browser session cookie.
+This tool does **not** use an OpenAI API key. It authenticates against the ChatGPT web backend using your ChatGPT browser session.
 
 > - Runs locally in your browser.
 > - No extensions required.
 > - No data leaves your machine.
 > - Open source and inspectable.
 
-### Step 1: Get your session token
+### Recommended flow
 
-1. Open [https://chatgpt.com](https://chatgpt.com) in your browser and sign in.
-2. Open developer tools (`F12` or `Cmd+Option+I` on macOS).
-3. Go to **Application** (Chrome/Edge) or **Storage** (Firefox) > **Cookies** > `https://chatgpt.com`.
-4. Find the cookie named `__Secure-next-auth.session-token` and copy its value.
+Run:
 
-### Step 2: Configure the token
-
-**Option A: `.env` file (recommended)**
-
-  ```bash
-  cp .env.example .env
-  ```
-
-  Edit `.env` and paste your token:
-
-  ```bash
-  CHATGPT_SESSION_TOKEN=eyJhbGciOiJkaXIiLCJlbmMiOi...
-  ```
-
-**Option B: Environment variable**
-
-  ```bash
-  export CHATGPT_SESSION_TOKEN="eyJhbGciOiJkaXIiLCJlbmMiOi..."
-  ```
-
-### Optional: CSRF token
-
-Some accounts may need the CSRF token as well. If authentication fails, also copy `__Host-next-auth.csrf-token` from your cookies:
-
+```bash
+chatgpt-bulk login
 ```
-CHATGPT_CSRF_TOKEN=abc123...
+
+The tool opens Chrome or a compatible browser, waits for you to sign in or finish any challenge, then stores the minimum required auth state locally for future runs.
+
+Stored auth location:
+
+- Linux/macOS: `~/.config/chatgpt-bulk/auth.json`
+- Windows: `%AppData%/chatgpt-bulk/auth.json`
+
+Useful auth commands:
+
+```bash
+chatgpt-bulk login
+chatgpt-bulk auth status
+chatgpt-bulk logout
 ```
+
+### Non-interactive fallback
+
+Automation and CI-style environments can still provide auth with environment variables:
+
+```bash
+export CHATGPT_SESSION_TOKEN="..."
+export CHATGPT_CSRF_TOKEN="..." # optional
+```
+
+Resolution order is:
+
+1. Stored local auth
+2. `CHATGPT_SESSION_TOKEN` and optional `CHATGPT_CSRF_TOKEN`
+3. If neither is available, run `chatgpt-bulk login`
+
+Additional auth details are in [docs/authentication.md](./docs/authentication.md).
 
 ## Usage Guide
 
 ### Quick start
 
 ```bash
+chatgpt-bulk login
 chatgpt-bulk
 ```
 
 Or if running from source:
 
 ```bash
+go run ./cmd/chatgpt-bulk --help
+go run ./cmd/chatgpt-bulk login
 go run ./cmd/chatgpt-bulk
 ```
 
-> Make sure to have the `.env` file with `CHATGPT_SESSION_TOKEN` saved in the same folder that you are running the binary from.
-
 ### What happens on launch
 
-1. **Browser launch** -- A temporary Chrome window opens and navigates to `chatgpt.com`.
-2. **Session validation** -- Your session token is injected as a cookie. The app waits for ChatGPT to return a valid access token. If the session is expired, Chrome will show a login page -- sign in there.
-3. **Browser closes** -- Once the access token is captured, the temporary Chrome window closes automatically.
-4. **TUI loads** -- Your conversations are fetched and displayed in the terminal.
+1. **Stored auth check** -- The app first tries locally saved auth, then environment variables if present.
+2. **Browser refresh if needed** -- If saved auth is stale and can be refreshed, a temporary Chrome window opens and navigates to `chatgpt.com`.
+3. **Session validation** -- The app waits for ChatGPT to return a valid access token. If Chrome shows a login page or challenge, complete it there.
+4. **Browser closes** -- Once a valid access token is captured, the temporary Chrome window closes automatically.
+5. **TUI loads** -- Your conversations are fetched and displayed in the terminal.
 
 ### CLI flags
 
@@ -170,6 +177,19 @@ go run ./cmd/chatgpt-bulk
 | `--debug` | Show verbose debug logs in the TUI | `false` |
 | `--version` | Print version and exit | |
 | `--help` | Print help and exit | |
+
+### Auth command examples
+
+```bash
+# Save local auth through an interactive browser login
+chatgpt-bulk login
+
+# Inspect stored auth and env-var fallback availability
+chatgpt-bulk auth status
+
+# Remove stored auth without touching environment variables
+chatgpt-bulk logout
+```
 
 ### Examples
 
