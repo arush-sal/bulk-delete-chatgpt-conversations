@@ -271,7 +271,7 @@ func (c *Client) ensureReady(ctx context.Context) error {
 	}
 	if c.browserCtx == nil {
 		if c.sessionToken == "" && c.accessToken == "" && !c.allowLogin {
-			return errors.New("no stored ChatGPT auth found and CHATGPT_SESSION_TOKEN is not set; run `chatgpt-bulk login`")
+			return errors.New("no stored ChatGPT auth file is available; run `chatgpt-bulk login`")
 		}
 		c.setStatus("Launching Chrome window...")
 		if err := c.startBrowser(); err != nil {

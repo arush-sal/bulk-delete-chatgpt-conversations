@@ -1,9 +1,11 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"strconv"
 	"strings"
@@ -17,22 +19,48 @@ import (
 	"github.com/spf13/cobra"
 )
 
-type authClient interface {
-	Authenticate(ctx context.Context) (chatgpt.AuthState, error)
-	Close()
-}
-
 var (
 	resolveAuthFn          = chatgpt.ResolveAuth
 	resolveAuthStatePathFn = chatgpt.ResolveAuthStatePath
 	saveAuthStateFn        = chatgpt.SaveAuthState
-	newAuthClientFn        = func(config chatgpt.Config) (authClient, error) { return chatgpt.New(config) }
+	newChatGPTClientFn     = chatgpt.New
+	authenticateClientFn   = func(client *chatgpt.Client, ctx context.Context) (chatgpt.AuthState, error) {
+		return client.Authenticate(ctx)
+	}
+	runTUIFn = func(client *chatgpt.Client) error {
+		program := tea.NewProgram(tui.New(client, version.Short()))
+		if _, err := program.Run(); err != nil {
+			return fmt.Errorf("tui error: %w", err)
+		}
+		return nil
+	}
+	isTerminalFn = func(r io.Reader, w io.Writer) bool {
+		inFile, inOK := r.(*os.File)
+		outFile, outOK := w.(*os.File)
+		if !inOK || !outOK {
+			return false
+		}
+		inInfo, err := inFile.Stat()
+		if err != nil {
+			return false
+		}
+		outInfo, err := outFile.Stat()
+		if err != nil {
+			return false
+		}
+		return inInfo.Mode()&os.ModeCharDevice != 0 && outInfo.Mode()&os.ModeCharDevice != 0
+	}
 )
 
 type commandOptions struct {
 	chromePath string
 	headless   bool
 	debug      bool
+}
+
+type loginOptions struct {
+	permanent   bool
+	sessionOnly bool
 }
 
 func main() {
@@ -58,11 +86,7 @@ func newRootCmd() *cobra.Command {
 			}
 			defer client.Close()
 
-			program := tea.NewProgram(tui.New(client, version.Short()))
-			if _, err := program.Run(); err != nil {
-				return fmt.Errorf("tui error: %w", err)
-			}
-			return nil
+			return runTUIFn(client)
 		},
 	}
 
@@ -78,30 +102,59 @@ func newRootCmd() *cobra.Command {
 }
 
 func newLoginCmd(opts *commandOptions) *cobra.Command {
-	return &cobra.Command{
+	loginOpts := &loginOptions{}
+
+	cmd := &cobra.Command{
 		Use:   "login",
-		Short: "Authenticate with ChatGPT in a browser and save local auth state",
+		Short: "Authenticate with ChatGPT for a saved or session-only login",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			_ = godotenv.Load()
 
-			resolved, err := resolveAuthFn(chatgpt.Config{})
+			mode, err := resolveLoginMode(cmd, loginOpts)
 			if err != nil {
 				return err
 			}
 
-			client, err := newAuthClientFn(chatgpt.Config{
+			if mode == loginModePrompt {
+				path, err := resolveAuthStatePathFn()
+				if err != nil {
+					return err
+				}
+				saveAuth, err := promptToSaveAuth(cmd, path)
+				if err != nil {
+					return err
+				}
+				if saveAuth {
+					mode = loginModePermanent
+				} else {
+					mode = loginModeSessionOnly
+				}
+			}
+
+			resolved, err := resolveAuthFn()
+			if err != nil {
+				return err
+			}
+
+			saveAuth := func(state chatgpt.AuthState) error { return nil }
+			if mode == loginModePermanent {
+				saveAuth = func(state chatgpt.AuthState) error {
+					_, err := saveAuthStateFn(state)
+					return err
+				}
+			}
+
+			client, err := newChatGPTClientFn(chatgpt.Config{
 				SessionToken: resolved.State.SessionToken,
 				CSRFToken:    resolved.State.CSRFToken,
+				AccessToken:  resolved.State.AccessToken,
 				UserEmail:    resolved.State.UserEmail,
 				AuthSource:   resolved.Source,
 				Debug:        resolvedDebug(cmd, opts),
 				Headless:     opts.headless,
 				ChromePath:   opts.chromePath,
 				AllowLogin:   true,
-				SaveAuth: func(state chatgpt.AuthState) error {
-					_, err := saveAuthStateFn(state)
-					return err
-				},
+				SaveAuth:     saveAuth,
 			})
 			if err != nil {
 				return err
@@ -111,20 +164,29 @@ func newLoginCmd(opts *commandOptions) *cobra.Command {
 			ctx, cancel := context.WithTimeout(cmd.Context(), 3*time.Minute)
 			defer cancel()
 
-			state, err := client.Authenticate(ctx)
+			state, err := authenticateClientFn(client, ctx)
 			if err != nil {
 				return err
 			}
 
-			path, pathErr := resolveAuthStatePathFn()
-			if pathErr != nil {
-				return pathErr
+			if mode == loginModeSessionOnly {
+				fmt.Fprintf(cmd.OutOrStdout(), "Logged in as %s\nAuth will be kept in-memory for this session only.\n", displayValue(state.UserEmail, "unknown email"))
+				return runTUIFn(client)
+			}
+
+			path, err := resolveAuthStatePathFn()
+			if err != nil {
+				return err
 			}
 
 			fmt.Fprintf(cmd.OutOrStdout(), "Logged in as %s\nSaved auth to %s\n", displayValue(state.UserEmail, "unknown email"), path)
 			return nil
 		},
 	}
+
+	cmd.Flags().BoolVar(&loginOpts.permanent, "permanent", false, "Save auth to the default auth file")
+	cmd.Flags().BoolVar(&loginOpts.sessionOnly, "session-only", false, "Keep auth in-memory only and open the TUI for this session")
+	return cmd
 }
 
 func newAuthCmd() *cobra.Command {
@@ -139,10 +201,8 @@ func newAuthCmd() *cobra.Command {
 func newAuthStatusCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "status",
-		Short: "Show stored and environment-based ChatGPT auth availability",
+		Short: "Show stored ChatGPT auth availability",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			_ = godotenv.Load()
-
 			path, err := chatgpt.ResolveAuthStatePath()
 			if err != nil {
 				return fmt.Errorf("auth file path resolution failed: %w", err)
@@ -154,9 +214,6 @@ func newAuthStatusCmd() *cobra.Command {
 				return fmt.Errorf("auth file read failed: %w", loadErr)
 			}
 
-			envSession := strings.TrimSpace(os.Getenv("CHATGPT_SESSION_TOKEN"))
-			envCSRF := strings.TrimSpace(os.Getenv("CHATGPT_CSRF_TOKEN"))
-
 			if hasStored {
 				fmt.Fprintf(cmd.OutOrStdout(), "Stored auth: present\n")
 				fmt.Fprintf(cmd.OutOrStdout(), "Auth file: %s\n", path)
@@ -166,9 +223,6 @@ func newAuthStatusCmd() *cobra.Command {
 				fmt.Fprintf(cmd.OutOrStdout(), "Stored auth: absent\n")
 				fmt.Fprintf(cmd.OutOrStdout(), "Auth file: %s\n", path)
 			}
-
-			fmt.Fprintf(cmd.OutOrStdout(), "Env session token: %s\n", presenceLabel(envSession != ""))
-			fmt.Fprintf(cmd.OutOrStdout(), "Env csrf token: %s\n", presenceLabel(envCSRF != ""))
 			return nil
 		},
 	}
@@ -195,15 +249,15 @@ func newLogoutCmd() *cobra.Command {
 }
 
 func newAppClient(cmd *cobra.Command, opts *commandOptions) (*chatgpt.Client, error) {
-	resolved, err := resolveAuthFn(chatgpt.Config{})
+	resolved, err := resolveAuthFn()
 	if err != nil {
 		return nil, fmt.Errorf("auth file read failed: %w", err)
 	}
 	if resolved.Source == chatgpt.AuthSourceNone {
-		return nil, errors.New("no stored ChatGPT auth found and CHATGPT_SESSION_TOKEN is not set; run `chatgpt-bulk login`")
+		return newInteractiveLoginClient(cmd, opts, resolved.Path)
 	}
 
-	client, err := chatgpt.New(chatgpt.Config{
+	client, err := newChatGPTClientFn(chatgpt.Config{
 		SessionToken: resolved.State.SessionToken,
 		CSRFToken:    resolved.State.CSRFToken,
 		AccessToken:  resolved.State.AccessToken,
@@ -224,6 +278,86 @@ func newAppClient(cmd *cobra.Command, opts *commandOptions) (*chatgpt.Client, er
 	return client, nil
 }
 
+type loginMode int
+
+const (
+	loginModePrompt loginMode = iota
+	loginModePermanent
+	loginModeSessionOnly
+)
+
+func resolveLoginMode(cmd *cobra.Command, opts *loginOptions) (loginMode, error) {
+	if opts.permanent && opts.sessionOnly {
+		return loginModePrompt, errors.New("choose either --permanent or --session-only, not both")
+	}
+	if opts.permanent {
+		return loginModePermanent, nil
+	}
+	if opts.sessionOnly {
+		return loginModeSessionOnly, nil
+	}
+	if !isTerminalFn(cmd.InOrStdin(), cmd.OutOrStdout()) {
+		return loginModePrompt, errors.New("login mode is ambiguous in a non-interactive terminal; pass --permanent or --session-only")
+	}
+	return loginModePrompt, nil
+}
+
+func newInteractiveLoginClient(cmd *cobra.Command, opts *commandOptions, authPath string) (*chatgpt.Client, error) {
+	out := cmd.OutOrStdout()
+	fmt.Fprintf(out, "Stored ChatGPT auth file not found at %s\n", authPath)
+	fmt.Fprintln(out, "Use `chatgpt-bulk login` for short-lived sessions.")
+
+	if !isTerminalFn(cmd.InOrStdin(), out) {
+		return nil, fmt.Errorf("stored ChatGPT auth file is missing at %s; run `chatgpt-bulk login` to authenticate", authPath)
+	}
+
+	saveAuth, err := promptToSaveAuth(cmd, authPath)
+	if err != nil {
+		return nil, err
+	}
+
+	config := chatgpt.Config{
+		Debug:      resolvedDebug(cmd, opts),
+		Headless:   opts.headless,
+		ChromePath: opts.chromePath,
+		AllowLogin: true,
+	}
+	if saveAuth {
+		config.SaveAuth = func(state chatgpt.AuthState) error {
+			_, err := saveAuthStateFn(state)
+			return err
+		}
+	}
+
+	return newChatGPTClientFn(config)
+}
+
+func promptToSaveAuth(cmd *cobra.Command, authPath string) (bool, error) {
+	reader := bufio.NewReader(cmd.InOrStdin())
+	for {
+		fmt.Fprintf(cmd.OutOrStdout(), "Create a permanent auth file at %s? [y/N]: ", authPath)
+
+		answer, err := reader.ReadString('\n')
+		if err != nil && !errors.Is(err, io.EOF) {
+			return false, fmt.Errorf("read login choice: %w", err)
+		}
+
+		answer = strings.TrimSpace(strings.ToLower(answer))
+		switch answer {
+		case "y", "yes":
+			return true, nil
+		case "", "n", "no":
+			fmt.Fprintln(cmd.OutOrStdout(), "Proceeding with in-memory auth for this session only.")
+			return false, nil
+		default:
+			fmt.Fprintln(cmd.OutOrStdout(), "Please answer yes or no.")
+			if errors.Is(err, io.EOF) {
+				return false, errors.New("login choice ended before receiving yes or no")
+			}
+		}
+	}
+}
+
 func resolvedDebug(cmd *cobra.Command, opts *commandOptions) bool {
 	flag := cmd.Flags().Lookup("debug")
 	if flag != nil && flag.Changed {
@@ -236,13 +370,6 @@ func parseBoolEnv(key string) bool {
 	v := strings.TrimSpace(strings.ToLower(os.Getenv(key)))
 	ok, err := strconv.ParseBool(v)
 	return err == nil && ok
-}
-
-func presenceLabel(ok bool) string {
-	if ok {
-		return "present"
-	}
-	return "absent"
 }
 
 func displayValue(value string, fallback string) string {

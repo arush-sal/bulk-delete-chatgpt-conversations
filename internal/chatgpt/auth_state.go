@@ -26,8 +26,6 @@ type AuthSource string
 const (
 	AuthSourceNone   AuthSource = "none"
 	AuthSourceStored AuthSource = "stored"
-	AuthSourceEnv    AuthSource = "env"
-	AuthSourceConfig AuthSource = "config"
 )
 
 type ResolvedAuth struct {
@@ -125,35 +123,19 @@ func RemoveAuthState() (string, bool, error) {
 	return path, true, nil
 }
 
-func ResolveAuth(config Config) (ResolvedAuth, error) {
-	path, pathErr := ResolveAuthStatePath()
-	if explicit := authStateFromTokens(config.SessionToken, config.CSRFToken); explicit.SessionToken != "" {
-		return ResolvedAuth{State: explicit, Source: AuthSourceConfig, Path: path}, nil
-	}
-
+func ResolveAuth() (ResolvedAuth, error) {
 	if stored, storedPath, err := LoadAuthState(); err == nil {
 		return ResolvedAuth{State: stored, Source: AuthSourceStored, Path: storedPath}, nil
 	} else if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return ResolvedAuth{}, err
 	}
 
-	if envState := authStateFromTokens(os.Getenv("CHATGPT_SESSION_TOKEN"), os.Getenv("CHATGPT_CSRF_TOKEN")); envState.SessionToken != "" {
-		return ResolvedAuth{State: envState, Source: AuthSourceEnv, Path: path}, nil
-	}
-
-	if pathErr != nil {
-		return ResolvedAuth{}, pathErr
+	path, err := ResolveAuthStatePath()
+	if err != nil {
+		return ResolvedAuth{}, err
 	}
 
 	return ResolvedAuth{Source: AuthSourceNone, Path: path}, nil
-}
-
-func authStateFromTokens(sessionToken, csrfToken string) AuthState {
-	return AuthState{
-		SessionToken: strings.TrimSpace(sessionToken),
-		CSRFToken:    strings.TrimSpace(csrfToken),
-		Source:       string(AuthSourceEnv),
-	}
 }
 
 func MaskToken(token string) string {
