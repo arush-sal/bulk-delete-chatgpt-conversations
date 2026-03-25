@@ -1,0 +1,314 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>chatgpt-bulk | Bulk cleanup for overloaded ChatGPT sidebars</title>
+    <meta
+      name="description"
+      content="A practical landing page for chatgpt-bulk, the Go terminal app that uses a real browser login to bulk archive or delete ChatGPT conversations."
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;700&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      rel="icon"
+      href="./project-mark.png"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="#top" aria-label="chatgpt-bulk home">
+        <span class="brand-mark">
+          <img src="./project-mark.png" alt="" />
+        </span>
+        <span class="brand-copy">
+          <strong>chatgpt-bulk</strong>
+          <span>Browser-assisted cleanup for crowded ChatGPT histories</span>
+        </span>
+      </a>
+      <nav class="site-nav" aria-label="Primary">
+        <a href="#workflow">Workflow</a>
+        <a href="#install">Install</a>
+        <a href="#docs">Docs</a>
+        <a href="https://github.com/arush-sal/bulk-delete-chatgpt-conversations">GitHub</a>
+      </nav>
+    </header>
+
+    <main id="top">
+      <section class="hero">
+        <div class="hero-inner">
+          <div class="hero-copy">
+            <p class="eyebrow">Go terminal app</p>
+            <p class="hero-product">chatgpt-bulk</p>
+            <h1>Clean up overloaded ChatGPT sidebars in batches.</h1>
+            <p class="hero-text">
+              <code>chatgpt-bulk</code> opens a real browser for login, captures
+              the session safely, then moves the cleanup work into a fast
+              keyboard-driven TUI built for selecting, filtering, archiving, and
+              deleting many conversations at once.
+            </p>
+            <div class="hero-actions">
+              <a
+                class="button button-primary"
+                href="https://github.com/arush-sal/bulk-delete-chatgpt-conversations/releases"
+              >
+                Download release
+              </a>
+              <a
+                class="button button-secondary"
+                href="https://github.com/arush-sal/bulk-delete-chatgpt-conversations#readme"
+              >
+                Read the README
+              </a>
+            </div>
+            <p class="hero-note">
+              Works on macOS and Linux with Chrome, Edge, Chromium, or Brave. No
+              OpenAI API key. No browser extension.
+            </p>
+          </div>
+        </div>
+
+        <div class="hero-stage" aria-label="chatgpt-bulk application preview">
+          <div class="tui-shell">
+            <div class="tui-titlebar">
+              <span class="traffic-lights" aria-hidden="true">
+                <span></span>
+                <span></span>
+                <span></span>
+              </span>
+              <span class="tui-title">chatgpt-bulk</span>
+              <span class="tui-path">cleanup-session.tui</span>
+            </div>
+
+            <div class="tui-summary">
+              <div class="summary-cell">
+                <span class="summary-label">session</span>
+                <strong>authenticated</strong>
+                <span class="summary-value">chrome login complete</span>
+              </div>
+              <div class="summary-cell">
+                <span class="summary-label">mode</span>
+                <strong>session-only</strong>
+                <span class="summary-value">no auth file written</span>
+              </div>
+              <div class="summary-cell">
+                <span class="summary-label">cache</span>
+                <strong>warm start</strong>
+                <span class="summary-value">219 chats available</span>
+              </div>
+              <div class="summary-cell">
+                <span class="summary-label">selection</span>
+                <strong>3 rows marked</strong>
+                <span class="summary-value">archive queued</span>
+              </div>
+            </div>
+
+            <div class="tui-body">
+              <section class="tui-panel tui-panel-main">
+                <div class="tui-panel-header">
+                  <span>conversation list</span>
+                  <span>query=/invoice sort=date desc</span>
+                </div>
+
+                <div class="tui-table-head">
+                  <span class="col-chat">conversation</span>
+                  <span class="col-date">updated</span>
+                  <span class="col-state">state</span>
+                </div>
+
+                <div class="tui-row tui-row-active">
+                  <span class="tui-marker tui-marker-on"></span>
+                  <span class="col-chat">2025 invoice imports</span>
+                  <span class="col-date">today</span>
+                  <span class="col-state col-state-selected">selected</span>
+                </div>
+                <div class="tui-row">
+                  <span class="tui-marker tui-marker-on"></span>
+                  <span class="col-chat">Expense reconciliation prompts</span>
+                  <span class="col-date">today</span>
+                  <span class="col-state col-state-selected">selected</span>
+                </div>
+                <div class="tui-row">
+                  <span class="tui-marker"></span>
+                  <span class="col-chat">TUI cursor bug thread</span>
+                  <span class="col-date">Mar 17</span>
+                  <span class="col-state">visible</span>
+                </div>
+                <div class="tui-row">
+                  <span class="tui-marker tui-marker-on"></span>
+                  <span class="col-chat">Unused brainstorming chats</span>
+                  <span class="col-date">Mar 11</span>
+                  <span class="col-state col-state-selected">selected</span>
+                </div>
+                <div class="tui-row">
+                  <span class="tui-marker"></span>
+                  <span class="col-chat">Browser auth regression</span>
+                  <span class="col-date">Mar 07</span>
+                  <span class="col-state">visible</span>
+                </div>
+
+                <div class="tui-footline">
+                  <span>visible 12 / 219</span>
+                  <span>cursor row 1</span>
+                  <span>space toggles selection</span>
+                </div>
+              </section>
+
+              <aside class="tui-side">
+                <div class="tui-panel">
+                  <div class="tui-panel-header">
+                    <span>next action</span>
+                    <span>enter confirms</span>
+                  </div>
+                  <div class="queue-copy">
+                    <strong>Archive selected conversations</strong>
+                    <p>Clear invoice-related chats from the sidebar while keeping them recoverable.</p>
+                  </div>
+                </div>
+
+                <div class="tui-panel">
+                  <div class="tui-panel-header">
+                    <span>shortcuts</span>
+                    <span>keyboard first</span>
+                  </div>
+                  <div class="shortcut-list">
+                    <span><kbd>/</kbd> filter</span>
+                    <span><kbd>space</kbd> toggle row</span>
+                    <span><kbd>a</kbd> select all</span>
+                    <span><kbd>s</kbd> sort</span>
+                    <span><kbd>esc</kbd> cancel</span>
+                    <span><kbd>q</kbd> quit</span>
+                  </div>
+                </div>
+
+                <div class="tui-panel">
+                  <div class="tui-panel-header">
+                    <span>status log</span>
+                    <span>live</span>
+                  </div>
+                  <div class="status-log">
+                    <span>auth token refreshed</span>
+                    <span>conversation cache loaded</span>
+                    <span>3 rows added to archive queue</span>
+                  </div>
+                </div>
+              </aside>
+            </div>
+
+            <div class="tui-commandbar">
+              <span class="command-pill command-pill-primary">archive selected</span>
+              <span class="command-pill">delete selected</span>
+              <span class="command-pill">cancel</span>
+              <span class="command-note">real browser auth first, terminal cleanup second</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="workflow">
+        <div class="section-intro">
+          <p class="eyebrow">Why it works</p>
+          <h2>Real browser in, bulk action out.</h2>
+          <p>
+            The product is built around the part most scripts get wrong: ChatGPT
+            auth is handled in an actual browser session, then the repetitive work
+            moves into a terminal flow where keyboard speed matters.
+          </p>
+        </div>
+
+        <div class="workflow-band">
+          <article>
+            <span>01</span>
+            <h3>Open login</h3>
+            <p>Launches Chrome-compatible browser automation in a context that can pass normal web checks.</p>
+          </article>
+          <article>
+            <span>02</span>
+            <h3>Capture auth</h3>
+            <p>Supports both saved auth for repeat use and session-only auth for a one-off cleanup run.</p>
+          </article>
+          <article>
+            <span>03</span>
+            <h3>Load conversations</h3>
+            <p>Shows cached metadata quickly, then refreshes in the background so the list becomes usable sooner.</p>
+          </article>
+          <article>
+            <span>04</span>
+            <h3>Archive or delete</h3>
+            <p>Filter by title, multi-select, confirm the action, and stop clicking through the sidebar one chat at a time.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="section practical-section" id="install">
+        <div class="section-intro">
+          <p class="eyebrow">Practical use</p>
+          <h2>Keep the page short. Put the detail where operators need it.</h2>
+        </div>
+
+        <div class="practical-layout">
+          <div class="command-panel">
+            <p class="panel-kicker">first run</p>
+            <pre><code>chatgpt-bulk login
+chatgpt-bulk
+
+# or from source
+go run ./cmd/chatgpt-bulk login
+go run ./cmd/chatgpt-bulk</code></pre>
+            <p class="panel-footnote">
+              Permanent auth is stored locally for repeat launches. Session-only
+              mode keeps auth in memory and opens the TUI for the current run.
+            </p>
+          </div>
+
+          <div class="practical-copy">
+            <div class="detail-row">
+              <p class="detail-label">Operating model</p>
+              <p>
+                Built in Go, terminal-first, and intentionally narrow in scope:
+                bulk archive and delete for users who already live in the ChatGPT web app.
+              </p>
+            </div>
+            <div class="detail-row">
+              <p class="detail-label">Requirements</p>
+              <p>macOS or Linux, a valid ChatGPT login, and a Chrome-compatible browser installed locally.</p>
+            </div>
+            <div class="detail-row">
+              <p class="detail-label">Read next</p>
+              <p>
+                Use the full README for flags and controls, the auth guide for file behavior,
+                and the manual auth E2E doc when you want repeatable live verification.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section final-section" id="docs">
+        <div class="final-copy">
+          <p class="eyebrow">Next step</p>
+          <h2>Use the landing page to understand the tool in a glance, then go straight to the operational docs.</h2>
+        </div>
+        <div class="doc-links" aria-label="Documentation links">
+          <a href="https://github.com/arush-sal/bulk-delete-chatgpt-conversations#readme">
+            <strong>README</strong>
+            <span>flags, controls, builds, and general usage</span>
+          </a>
+          <a href="https://github.com/arush-sal/bulk-delete-chatgpt-conversations/blob/master/docs/authentication.md">
+            <strong>Authentication</strong>
+            <span>permanent auth, session-only mode, local file locations</span>
+          </a>
+          <a href="https://github.com/arush-sal/bulk-delete-chatgpt-conversations/blob/master/docs/manual-auth-e2e.md">
+            <strong>Manual auth E2E</strong>
+            <span>repeatable live checks for missing-auth and login flows</span>
+          </a>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>
