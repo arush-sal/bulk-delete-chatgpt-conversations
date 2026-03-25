@@ -711,7 +711,6 @@ func (m Model) renderConversationListPane(height int) string {
 	}
 
 	bodyLines := []string{
-		tableMetaStyle.Render(m.selectionMetaLine()),
 		m.renderFilterLine(),
 		m.renderConversationTable(m.selectionTableHeight(height)),
 		tableMetaStyle.Render(m.selectionFooterLine()),
@@ -753,7 +752,6 @@ func (m Model) renderNextActionPanel() string {
 
 	if m.phase == phaseConfirm {
 		lines = append(lines, "")
-		lines = append(lines, subtleStyle.Render(fmt.Sprintf("Selected rows: %d", len(m.selected))))
 		if m.selectedAction() == actionDelete {
 			lines = append(lines, warningStyle.Render("Delete keeps the current behavior and may be hard to recover."))
 		} else {
@@ -833,18 +831,14 @@ func (m Model) renderSummaryCard(width int, title, value, detail string) string 
 	return summaryCardStyle.Width(width).Render(content)
 }
 
-func (m Model) selectionMetaLine() string {
-	return fmt.Sprintf("%d visible   %d selected   sort %s", len(m.filtered), len(m.selected), sortLabels[m.sortBy])
-}
-
 func (m Model) renderFilterLine() string {
 	if m.filtering {
-		return filterActiveStyle.Render("/ " + m.filterText + "█")
+		return filterActiveStyle.Render("/ " + m.filterText + "█   sort " + sortLabels[m.sortBy])
 	}
 	if m.filterText != "" {
-		return filterStyle.Render("/ " + m.filterText)
+		return filterStyle.Render("/ " + m.filterText + "   sort " + sortLabels[m.sortBy])
 	}
-	return filterStyle.Render("/ all conversations")
+	return filterStyle.Render("/ all conversations   sort " + sortLabels[m.sortBy])
 }
 
 func (m Model) selectionFooterLine() string {
@@ -1322,7 +1316,7 @@ func (m Model) pageSize() int {
 }
 
 func (m Model) selectionTableHeight(bodyH int) int {
-	// Workspace panel overhead: 2 borders + 1 panel title + 3 fixed body rows
-	// (meta, filter, footer).
-	return max(8, bodyH-6)
+	// Workspace panel overhead: 2 borders + 1 panel title + 2 fixed body rows
+	// (filter and footer).
+	return max(8, bodyH-5)
 }
