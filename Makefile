@@ -18,8 +18,7 @@ LDFLAGS := -X $(MODULE)/internal/version.Version=$(VERSION) \
 release:
 	if [ ! -d dist ]; then mkdir dist; fi
 	CGO_ENABLED=0 GOOS=$(OS) GOARCH=$(ARCH) go build -ldflags "$(LDFLAGS)" -o $(BINARY) $(CMD)
-	tar -czf dist/$(BINARY)_$(VERSION)_$(OS)_$(ARCH).tar.gz \
-		README.md LICENSE $(BINARY)
+	tar -czf dist/$(BINARY)_$(VERSION)_$(OS)_$(ARCH).tar.gz $(BINARY)
 	shasum -a 256 dist/$(BINARY)_$(VERSION)_$(OS)_$(ARCH).tar.gz > dist/checksums.txt
 
 build-windows:
@@ -36,22 +35,19 @@ build-all: build-amd64 build-arm64
 release-windows:
 	if [ ! -d dist ]; then mkdir dist; fi
 	CGO_ENABLED=0 go build -ldflags "$(LDFLAGS)" -o $(BINARY).exe $(CMD)
-	tar -czf dist/$(BINARY)_$(VERSION)_windows_amd64.tar.gz \
-		README.md LICENSE $(BINARY).exe
+	tar -czf dist/$(BINARY)_$(VERSION)_windows_amd64.tar.gz $(BINARY).exe
 	sha256sum dist/$(BINARY)_$(VERSION)_windows_amd64.tar.gz >> checksums.txt
 
 release-amd64:
 	if [ ! -d dist ]; then mkdir dist; fi
 	CGO_ENABLED=0 GOOS=$(OS) GOARCH=amd64 go build -ldflags "$(LDFLAGS)" -o $(BINARY) $(CMD)
-	tar -czf dist/$(BINARY)_$(VERSION)_$(OS)_amd64.tar.gz \
-		README.md LICENSE $(BINARY)
+	tar -czf dist/$(BINARY)_$(VERSION)_$(OS)_amd64.tar.gz $(BINARY)
 	shasum -a 256 dist/$(BINARY)_$(VERSION)_$(OS)_amd64.tar.gz >> checksums.txt
 
 release-arm64:
 	if [ ! -d dist ]; then mkdir dist; fi
 	CGO_ENABLED=0 GOOS=$(OS) GOARCH=arm64 go build -ldflags "$(LDFLAGS)" -o $(BINARY) $(CMD)
-	tar -czf dist/$(BINARY)_$(VERSION)_$(OS)_arm64.tar.gz \
-		README.md LICENSE $(BINARY)
+	tar -czf dist/$(BINARY)_$(VERSION)_$(OS)_arm64.tar.gz $(BINARY)
 	shasum -a 256 dist/$(BINARY)_$(VERSION)_$(OS)_arm64.tar.gz >> checksums.txt
 
 release-all:
