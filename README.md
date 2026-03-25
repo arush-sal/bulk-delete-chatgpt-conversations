@@ -32,7 +32,6 @@ It opens a temporary Chrome window, validates your ChatGPT session there, captur
 | macOS | Intel (amd64) | Supported |
 | Linux | amd64 | Supported |
 | Linux | arm64 | Supported |
-| Windows via WSL | amd64 | Supported |
 
 ## Requirements
 
@@ -212,8 +211,6 @@ chatgpt-bulk --chrome-path "/Applications/Google Chrome.app"
 # Linux with Chromium
 chatgpt-bulk --chrome-path /usr/bin/chromium
 
-# Windows via WSL
-chatgpt-bulk --chrome-path "/mnt/c/Program Files/Google/Chrome/Application/chrome.exe"
 ```
 
 ## TUI Controls
@@ -289,12 +286,6 @@ If `--chrome-path` is not provided, the app searches these locations automatical
 
 - `google-chrome`, `google-chrome-stable`, `chromium`, `chromium-browser` (via `$PATH`)
 - `/usr/bin/google-chrome`, `/usr/bin/chromium`, `/snap/bin/chromium`
-
-**Windows via WSL:**
-
-- `/mnt/c/Program Files/Google/Chrome/Application/chrome.exe`
-- `/mnt/c/Program Files (x86)/Google/Chrome/Application/chrome.exe`
-- `/mnt/c/Program Files/Microsoft/Edge/Application/msedge.exe`
 
 ## Troubleshooting
 
