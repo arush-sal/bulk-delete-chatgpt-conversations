@@ -21,6 +21,7 @@ A browser-assisted Go TUI for cleaning up your ChatGPT history without clicking 
 - Supports bulk archive and bulk delete actions
 - Uses a real browser session up front to avoid the `403`/bot-protection problems common with plain HTTP scripts
 - Shows auth/debug progress directly inside the TUI when `--debug` is enabled
+- Caches conversation metadata locally so repeat launches can render faster while a background refresh runs
 
 It opens a temporary Chrome window, validates your ChatGPT session there, captures an access token, closes that browser window automatically, and then lets you bulk archive or bulk delete conversations from a terminal interface.
 
@@ -153,11 +154,12 @@ go run ./cmd/chatgpt-bulk
 ### What happens on launch
 
 1. **Stored auth check** -- The app first looks for the default auth file.
-2. **Missing auth handling** -- If the auth file is missing and the terminal is interactive, the app tells you the file is missing, reminds you to use `chatgpt-bulk login` for short-lived sessions, and asks whether to create a permanent auth file.
-3. **Browser refresh if needed** -- A temporary Chrome window opens and navigates to `chatgpt.com`.
-4. **Session validation** -- The app waits for ChatGPT to return a valid access token. If Chrome shows a login page or challenge, complete it there.
-5. **Browser closes** -- Once a valid access token is captured, the temporary Chrome window closes automatically.
-6. **TUI loads** -- Your conversations are fetched and displayed in the terminal.
+2. **Local conversation cache** -- If a prior conversation snapshot exists, the TUI can show it immediately while a fresh backend sync runs.
+3. **Missing auth handling** -- If the auth file is missing and the terminal is interactive, the app tells you the file is missing, reminds you to use `chatgpt-bulk login` for short-lived sessions, and asks whether to create a permanent auth file.
+4. **Browser refresh if needed** -- A temporary Chrome window opens and navigates to `chatgpt.com`.
+5. **Session validation** -- The app waits for ChatGPT to return a valid access token. If Chrome shows a login page or challenge, complete it there.
+6. **Browser closes** -- Once a valid access token is captured, the temporary Chrome window closes automatically.
+7. **Refresh completes** -- The latest conversations replace the cached view, and items previously archived or deleted through the app stay hidden locally.
 
 ### CLI flags
 

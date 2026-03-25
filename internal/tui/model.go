@@ -38,6 +38,7 @@ var actionLabels = []string{"Archive", "Delete", "Cancel"}
 type loadResultMsg struct {
 	conversations []chatgpt.Conversation
 	err           error
+	refresh       bool
 }
 
 type snapshotMsg struct {
@@ -141,7 +142,7 @@ func New(client *chatgpt.Client, version string) Model {
 }
 
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(loadConversationsCmd(m.client), pollSnapshotCmd(m.client))
+	return tea.Batch(loadCachedConversationsCmd(m.client), loadConversationsCmd(m.client), pollSnapshotCmd(m.client))
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -150,17 +151,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 	case loadResultMsg:
-		// Conversation loading is kicked off immediately in Init and moves the
-		// model from auth/loading into the selectable list view.
 		if msg.err != nil {
-			m.phase = phaseError
-			m.err = msg.err
+			if msg.refresh && len(m.conversations) == 0 {
+				m.phase = phaseError
+				m.err = msg.err
+			}
 			return m, nil
 		}
+		if !msg.refresh && len(msg.conversations) == 0 {
+			return m, nil
+		}
+
 		m.conversations = msg.conversations
 		m.applyFilterAndSort()
 		m.phase = phaseSelect
-		if len(m.conversations) == 0 {
+		if msg.refresh && len(m.conversations) == 0 {
 			m.phase = phaseDone
 		}
 	case snapshotMsg:
@@ -840,22 +845,39 @@ func loadConversationsCmd(client *chatgpt.Client) tea.Cmd {
 
 		conversations, err := client.ListConversations(ctx, 100)
 		if err != nil {
+			return loadResultMsg{err: err, refresh: true}
+		}
+
+		sortConversations(conversations)
+
+		return loadResultMsg{conversations: conversations, refresh: true}
+	}
+}
+
+func loadCachedConversationsCmd(client *chatgpt.Client) tea.Cmd {
+	return func() tea.Msg {
+		conversations, err := client.CachedConversations()
+		if err != nil {
 			return loadResultMsg{err: err}
 		}
 
-		// Mirror the web UI by showing the most recently updated conversations first.
-		slices.SortStableFunc(conversations, func(a, b chatgpt.Conversation) int {
-			if a.UpdateTime.Equal(b.UpdateTime.Time) {
-				return strings.Compare(strings.ToLower(a.Title), strings.ToLower(b.Title))
-			}
-			if a.UpdateTime.After(b.UpdateTime.Time) {
-				return -1
-			}
-			return 1
-		})
+		sortConversations(conversations)
 
 		return loadResultMsg{conversations: conversations}
 	}
+}
+
+func sortConversations(conversations []chatgpt.Conversation) {
+	// Mirror the web UI by showing the most recently updated conversations first.
+	slices.SortStableFunc(conversations, func(a, b chatgpt.Conversation) int {
+		if a.UpdateTime.Equal(b.UpdateTime.Time) {
+			return strings.Compare(strings.ToLower(a.Title), strings.ToLower(b.Title))
+		}
+		if a.UpdateTime.After(b.UpdateTime.Time) {
+			return -1
+		}
+		return 1
+	})
 }
 
 func pollSnapshotCmd(client *chatgpt.Client) tea.Cmd {

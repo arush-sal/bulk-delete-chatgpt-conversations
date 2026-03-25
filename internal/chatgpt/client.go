@@ -192,6 +192,11 @@ func (c *Client) ListConversations(ctx context.Context, pageSize int) ([]Convers
 		pageSize = 100
 	}
 
+	cache, err := c.loadConversationCache()
+	if err != nil {
+		return nil, err
+	}
+
 	var (
 		offset        int
 		conversations []Conversation
@@ -221,7 +226,13 @@ func (c *Client) ListConversations(ctx context.Context, pageSize int) ([]Convers
 		offset += pageSize
 	}
 
-	return conversations, nil
+	cache.Conversations = conversations
+	cache.Conversations = filterHiddenConversations(cache.Conversations, cache.Hidden)
+	if err := c.saveConversationCache(cache); err != nil {
+		return nil, err
+	}
+
+	return cache.Conversations, nil
 }
 
 func (c *Client) ArchiveConversation(ctx context.Context, id string) error {
@@ -239,7 +250,11 @@ func (c *Client) ArchiveConversation(ctx context.Context, id string) error {
 		}
 		_, err = c.doBackendRequest(ctx, httpMethodPatch, backendAPIURL+"/conversation/"+id, map[string]any{"is_archived": true})
 	}
-	return err
+	if err != nil {
+		return err
+	}
+
+	return c.recordConversationVisibility(id, ConversationVisibilityArchived)
 }
 
 func (c *Client) DeleteConversation(ctx context.Context, id string) error {
@@ -257,7 +272,23 @@ func (c *Client) DeleteConversation(ctx context.Context, id string) error {
 		}
 		_, err = c.doBackendRequest(ctx, httpMethodPatch, backendAPIURL+"/conversation/"+id, map[string]any{"is_visible": false})
 	}
-	return err
+	if err != nil {
+		return err
+	}
+
+	return c.recordConversationVisibility(id, ConversationVisibilityDeleted)
+}
+
+func (c *Client) CachedConversations() ([]Conversation, error) {
+	cache, err := c.loadConversationCache()
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	return cache.Conversations, nil
 }
 
 func (c *Client) ensureReady(ctx context.Context) error {
@@ -550,6 +581,45 @@ func (c *Client) currentAuthState() AuthState {
 		SavedAt:      time.Now().UTC(),
 		Source:       string(c.authSource),
 	}
+}
+
+func (c *Client) loadConversationCache() (ConversationCache, error) {
+	cache, _, err := LoadConversationCache()
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return ConversationCache{Hidden: make(map[string]ConversationCacheEntry)}, nil
+		}
+		c.debugf("conversation cache load failed, rebuilding from backend: %v", err)
+		return ConversationCache{Hidden: make(map[string]ConversationCacheEntry)}, nil
+	}
+	return cache, nil
+}
+
+func (c *Client) saveConversationCache(cache ConversationCache) error {
+	if _, err := SaveConversationCache(cache); err != nil {
+		return fmt.Errorf("conversation cache write failed: %w", err)
+	}
+	return nil
+}
+
+func (c *Client) recordConversationVisibility(id string, visibility ConversationVisibility) error {
+	cache, err := c.loadConversationCache()
+	if err != nil {
+		return err
+	}
+
+	if cache.Hidden == nil {
+		cache.Hidden = make(map[string]ConversationCacheEntry)
+	}
+
+	conversationID := strings.TrimSpace(id)
+	cache.Hidden[conversationID] = ConversationCacheEntry{
+		Visibility: visibility,
+		UpdatedAt:  time.Now().UTC(),
+	}
+	cache.Conversations = filterHiddenConversations(cache.Conversations, cache.Hidden)
+
+	return c.saveConversationCache(cache)
 }
 
 func (c *Client) applyAuthState(state AuthState) {
