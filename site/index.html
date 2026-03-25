@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>chatgpt-bulk | Bulk archive and delete ChatGPT conversations</title>
+    <meta
+      name="description"
+      content="A browser-assisted Go TUI for filtering, selecting, archiving, and deleting ChatGPT conversations in bulk."
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="site-header">
+        <a class="brand" href="#top" aria-label="chatgpt-bulk home">
+          <span class="brand-mark">cb</span>
+          <span class="brand-copy">
+            <strong>chatgpt-bulk</strong>
+            <span>Bulk cleanup for ChatGPT history</span>
+          </span>
+        </a>
+        <nav class="site-nav" aria-label="Primary">
+          <a href="#features">Features</a>
+          <a href="#install">Install</a>
+          <a href="#docs">Docs</a>
+          <a href="https://github.com/arush-sal/bulk-delete-chatgpt-conversations">GitHub</a>
+        </nav>
+      </header>
+
+      <main id="top">
+        <section class="hero">
+          <div class="hero-copy">
+            <p class="eyebrow">Static project landing page</p>
+            <h1>Clean up ChatGPT conversations without grinding through the sidebar.</h1>
+            <p class="hero-text">
+              <code>chatgpt-bulk</code> uses a real browser session to authenticate,
+              then opens a terminal UI where you can filter, select, archive, or
+              delete conversations in batches.
+            </p>
+            <div class="hero-actions">
+              <a class="button button-primary" href="https://github.com/arush-sal/bulk-delete-chatgpt-conversations/releases">
+                Download release
+              </a>
+              <a class="button button-secondary" href="https://github.com/arush-sal/bulk-delete-chatgpt-conversations">
+                View repository
+              </a>
+            </div>
+            <ul class="hero-points" aria-label="Highlights">
+              <li>Go-based TUI with bulk archive and delete flows</li>
+              <li>Browser-assisted auth to avoid plain HTTP bot-protection failures</li>
+              <li>Simple static site with no build pipeline required</li>
+            </ul>
+          </div>
+
+          <aside class="terminal-card" aria-label="Example usage">
+            <div class="terminal-bar">
+              <span></span>
+              <span></span>
+              <span></span>
+            </div>
+            <pre><code>$ chatgpt-bulk login
+Open browser for ChatGPT authentication
+Choose auth mode: permanent or session-only
+
+$ chatgpt-bulk
+Loaded 248 conversations
+Filter, sort, multi-select, then archive or delete</code></pre>
+          </aside>
+        </section>
+
+        <section class="section-grid" id="features">
+          <article class="info-card">
+            <h2>What it does</h2>
+            <p>
+              The tool lists conversations from your ChatGPT account, lets you
+              search and sort them inside a terminal interface, and applies bulk
+              archive or delete actions after confirmation.
+            </p>
+          </article>
+          <article class="info-card">
+            <h2>Why it exists</h2>
+            <p>
+              ChatGPT’s web UI makes large cleanups slow. This project moves the
+              repetitive work into a faster TUI while still authenticating through
+              the same browser-backed flow the site expects.
+            </p>
+          </article>
+          <article class="info-card">
+            <h2>Where it runs</h2>
+            <p>
+              Current support targets macOS and Linux on amd64 and arm64, with a
+              Chrome-compatible browser available for the login step.
+            </p>
+          </article>
+        </section>
+
+        <section class="section-stack">
+          <div class="section-heading">
+            <p class="eyebrow">Core workflow</p>
+            <h2>Browser login first, batch actions second.</h2>
+          </div>
+          <div class="flow-grid">
+            <article class="flow-card">
+              <span>01</span>
+              <h3>Authenticate in a real browser</h3>
+              <p>
+                Run <code>chatgpt-bulk login</code> and complete sign-in or any
+                challenge in Chrome, Edge, Brave, or Chromium.
+              </p>
+            </article>
+            <article class="flow-card">
+              <span>02</span>
+              <h3>Open the TUI</h3>
+              <p>
+                Launch <code>chatgpt-bulk</code> to load your conversations,
+                paginate through them, and filter the list by title.
+              </p>
+            </article>
+            <article class="flow-card">
+              <span>03</span>
+              <h3>Review and apply</h3>
+              <p>
+                Multi-select entries, choose archive or delete, and confirm once
+                instead of clicking one conversation at a time.
+              </p>
+            </article>
+          </div>
+        </section>
+
+        <section class="section-stack" id="install">
+          <div class="section-heading">
+            <p class="eyebrow">Install and use</p>
+            <h2>Start with a release binary or build from source.</h2>
+          </div>
+          <div class="code-grid">
+            <article class="code-card">
+              <h3>Install</h3>
+              <pre><code># Download a release for your platform
+# https://github.com/arush-sal/bulk-delete-chatgpt-conversations/releases
+
+# Verify the binary
+./chatgpt-bulk --version</code></pre>
+            </article>
+            <article class="code-card">
+              <h3>Quick start</h3>
+              <pre><code>chatgpt-bulk login
+chatgpt-bulk</code></pre>
+            </article>
+            <article class="code-card">
+              <h3>Build from source</h3>
+              <pre><code>git clone https://github.com/arush-sal/bulk-delete-chatgpt-conversations.git
+cd bulk-delete-chatgpt-conversations
+make build
+./chatgpt-bulk --version</code></pre>
+            </article>
+          </div>
+        </section>
+
+        <section class="section-stack" id="docs">
+          <div class="section-heading">
+            <p class="eyebrow">Documentation</p>
+            <h2>Use the landing page as the front door and keep deeper docs in-repo.</h2>
+          </div>
+          <div class="docs-grid">
+            <a class="doc-card" href="https://github.com/arush-sal/bulk-delete-chatgpt-conversations#readme">
+              <h3>README</h3>
+              <p>Full CLI usage, platform support, controls, and troubleshooting.</p>
+            </a>
+            <a class="doc-card" href="https://github.com/arush-sal/bulk-delete-chatgpt-conversations/blob/master/docs/authentication.md">
+              <h3>Authentication guide</h3>
+              <p>Permanent vs session-only auth, storage paths, and auth-file behavior.</p>
+            </a>
+            <a class="doc-card" href="https://github.com/arush-sal/bulk-delete-chatgpt-conversations/blob/master/docs/manual-auth-e2e.md">
+              <h3>Manual auth E2E harness</h3>
+              <p>Repeatable live verification steps for missing-auth, session-only, and permanent-auth flows.</p>
+            </a>
+          </div>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>
