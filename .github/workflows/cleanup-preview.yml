@@ -1,0 +1,86 @@
+# Clean up the preview environment when a site-related PR is closed,
+# then redeploy production from master so the live site is restored.
+name: Cleanup Site Preview
+
+on:
+  pull_request:
+    types: [closed]
+    paths:
+      - "site/**"
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+  deployments: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete preview environment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const envName = `preview-pr-${context.payload.pull_request.number}`;
+            core.info(`Cleaning up environment: ${envName}`);
+
+            try {
+              const { data: deployments } = await github.rest.repos.listDeployments({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                environment: envName,
+              });
+
+              for (const deployment of deployments) {
+                await github.rest.repos.createDeploymentStatus({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  deployment_id: deployment.id,
+                  state: 'inactive',
+                });
+                await github.rest.repos.deleteDeployment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  deployment_id: deployment.id,
+                });
+              }
+
+              await github.rest.repos.deleteAnEnvironment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                environment_name: envName,
+              });
+
+              core.info(`Environment ${envName} deleted`);
+            } catch (error) {
+              core.warning(`Cleanup for ${envName}: ${error.message}`);
+            }
+
+  redeploy-production:
+    needs: cleanup
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout master
+        uses: actions/checkout@v4
+        with:
+          ref: master
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: "site"
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
