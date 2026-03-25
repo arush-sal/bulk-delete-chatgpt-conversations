@@ -260,20 +260,48 @@ func TestViewSelectionLayoutKeepsDashboardPanelsAligned(t *testing.T) {
 
 	foundCardRow := false
 	foundSplitRow := false
+	foundHeaderMetaRow := false
+	foundTableHeaderRow := false
+	foundFilterSortRow := false
+	foundFooterMetaRow := false
 	for _, line := range lines {
+		if strings.Contains(line, "chatgpt-bulk") && strings.Contains(line, "vtest") {
+			foundHeaderMetaRow = true
+		}
 		if strings.Contains(line, "SESSION") && strings.Contains(line, "MODE") && strings.Contains(line, "CACHE") && strings.Contains(line, "SELECTION") {
 			foundCardRow = true
 		}
 		if strings.Contains(line, "Conversations") && strings.Contains(line, "Next Action") {
 			foundSplitRow = true
 		}
+		if strings.Contains(line, "Conversation Title") && strings.Contains(line, "Updated") && strings.Contains(line, "State") {
+			foundTableHeaderRow = true
+		}
+		if strings.Contains(line, "/ all conversations") && strings.Contains(line, "sort") {
+			foundFilterSortRow = true
+		}
+		if strings.Contains(line, "visible") && strings.Contains(line, "row 1/3") {
+			foundFooterMetaRow = true
+		}
 	}
 
+	if !foundHeaderMetaRow {
+		t.Fatalf("dashboard header meta did not render on one row\n%s", view)
+	}
 	if !foundCardRow {
 		t.Fatalf("dashboard header cards did not render in one row\n%s", view)
 	}
 	if !foundSplitRow {
 		t.Fatalf("dashboard body columns did not render in one row\n%s", view)
+	}
+	if !foundTableHeaderRow {
+		t.Fatalf("conversation table headers did not render on one row\n%s", view)
+	}
+	if !foundFilterSortRow {
+		t.Fatalf("filter and sort row did not render on one row\n%s", view)
+	}
+	if !foundFooterMetaRow {
+		t.Fatalf("footer metadata did not render on one row\n%s", view)
 	}
 }
 

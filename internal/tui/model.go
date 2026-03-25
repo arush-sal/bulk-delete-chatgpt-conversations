@@ -3,7 +3,6 @@ package tui
 import (
 	"context"
 	"fmt"
-	"runtime"
 	"slices"
 	"strings"
 	"time"
@@ -67,7 +66,7 @@ const (
 	sortTitleDesc
 )
 
-var sortLabels = []string{"Date ↓", "Date ↑", "Title A-Z", "Title Z-A"}
+var sortLabels = []string{"newest", "oldest", "A-Z", "Z-A"}
 
 const appBg = lipgloss.Color("#1A1826")
 
@@ -613,16 +612,9 @@ func (m Model) renderError(bodyH int) string {
 func (m Model) renderChrome() string {
 	w := m.contentWidth()
 	innerW := innerWidthForStyle(headerBoxStyle, w)
-	meta := headerMetaStyle.Render(fmt.Sprintf("%s   %s", valueOrPlaceholder(m.version), runtime.Version()))
-	metaW := lipgloss.Width(meta)
-	titleW := max(1, innerW-metaW)
-	titleRow := lipgloss.JoinHorizontal(
-		lipgloss.Top,
-		lipgloss.NewStyle().Background(appBg).Width(titleW).Render(appTitleStyle.Render("bulk-delete-chatgpt-conversations")),
-		lipgloss.NewStyle().Background(appBg).Width(metaW).Align(lipgloss.Right).Render(meta),
-	)
+	titleRow := renderBoundedText(appTitleStyle, "chatgpt-bulk  "+valueOrPlaceholder(m.version), innerW)
 
-	cardWidths := splitFixedWidth(innerW, 4, 1)
+	cardWidths := splitFixedWidth(innerW-2, 4, 1)
 	cards := []string{
 		m.renderSummaryCard(cardWidths[0], "SESSION", valueOrPlaceholder(m.email), valueOrPlaceholder(m.sessionID)),
 		m.renderSummaryCard(cardWidths[1], "MODE", m.modeSummary(), m.modeSummaryDetail()),
@@ -644,7 +636,7 @@ func (m Model) renderChrome() string {
 func (m Model) renderConversationTable(height int) string {
 	visible := m.visibleRange(height)
 	headers := []string{"", "Conversation Title", "Updated", "State"}
-	contentWidth := m.leftPanelInnerWidth()
+	contentWidth := max(1, m.leftPanelInnerWidth()-1)
 	widths := m.conversationColumnWidths(contentWidth)
 
 	var rows []string
@@ -666,7 +658,7 @@ func (m Model) renderConversationTable(height int) string {
 		}
 		date := "-"
 		if !conv.UpdateTime.IsZero() {
-			date = conv.UpdateTime.Local().Format("2006-01-02 15:04")
+			date = conv.UpdateTime.Local().Format("Jan 02 15:04")
 		}
 		state := "active"
 		if conv.IsArchived {
@@ -822,9 +814,9 @@ func (m Model) renderSummaryCard(width int, title, value, detail string) string 
 	innerW := innerWidthForStyle(summaryCardStyle, width)
 	content := lipgloss.JoinVertical(
 		lipgloss.Left,
-		summaryTitleStyle.Render(title),
-		summaryValueStyle.Width(innerW).Render(trim(value, innerW)),
-		summarySubtleStyle.Width(innerW).Render(trim(detail, innerW)),
+		renderBoundedText(summaryTitleStyle, title, innerW),
+		renderBoundedText(summaryValueStyle, value, innerW),
+		renderBoundedText(summarySubtleStyle, detail, innerW),
 	)
 	return summaryCardStyle.Width(innerW).Render(content)
 }
@@ -836,11 +828,7 @@ func (m Model) renderFilterLine() string {
 	} else if m.filterText != "" {
 		filterLabel = "/ " + m.filterText
 	}
-	return renderAlignedLine(
-		m.leftPanelInnerWidth(),
-		filterStyle.Render(filterLabel),
-		tableMetaStyle.Render("sort "+sortLabels[m.sortBy]),
-	)
+	return renderBoundedText(filterStyle, filterLabel+"  sort "+sortLabels[m.sortBy], max(1, m.leftPanelInnerWidth()-1))
 }
 
 func (m Model) selectionFooterLine() string {
@@ -848,11 +836,7 @@ func (m Model) selectionFooterLine() string {
 	if len(m.filtered) > 0 {
 		cursor = m.cursor + 1
 	}
-	return renderAlignedLine(
-		m.leftPanelInnerWidth(),
-		fmt.Sprintf("Visible %d of %d", len(m.filtered), len(m.conversations)),
-		fmt.Sprintf("Cursor row %d of %d", cursor, len(m.filtered)),
-	)
+	return renderBoundedText(tableMetaStyle, fmt.Sprintf("%d visible  row %d/%d", len(m.filtered), cursor, len(m.filtered)), max(1, m.leftPanelInnerWidth()-1))
 }
 
 func (m Model) modeSummary() string {
@@ -879,19 +863,19 @@ func (m Model) modeSummary() string {
 func (m Model) modeSummaryDetail() string {
 	switch m.phase {
 	case phaseLoading:
-		return "Browser auth and sync in progress"
+		return "Auth + sync"
 	case phaseSelect:
-		return "Review conversations and mark rows"
+		return "Mark rows"
 	case phaseAction:
-		return "Choose archive, delete, or cancel"
+		return "Choose action"
 	case phaseConfirm:
-		return "Confirm the selected bulk action"
+		return "Confirm action"
 	case phaseRunning:
-		return "Applying the chosen bulk action"
+		return "Applying action"
 	case phaseDone:
-		return "Bulk run finished"
+		return "Finished"
 	case phaseError:
-		return "See the status log for context"
+		return "See the status log"
 	default:
 		return "Waiting for input"
 	}
@@ -913,11 +897,11 @@ func (m Model) cacheSummary() string {
 func (m Model) cacheSummaryDetail() string {
 	switch {
 	case len(m.conversations) == 0 && m.phase == phaseLoading:
-		return "No cached conversations rendered yet"
+		return "No cache rendered yet"
 	case len(m.conversations) == 0:
-		return "No visible conversations in the local cache"
+		return "No visible cached rows"
 	default:
-		return fmt.Sprintf("%d conversations available locally", len(m.conversations))
+		return fmt.Sprintf("%d cached locally", len(m.conversations))
 	}
 }
 
@@ -932,7 +916,7 @@ func (m Model) selectionSummaryDetail() string {
 	if len(m.filtered) == 0 {
 		return "No visible rows"
 	}
-	return fmt.Sprintf("Cursor row %d of %d", m.cursor+1, len(m.filtered))
+	return fmt.Sprintf("row %d/%d", m.cursor+1, len(m.filtered))
 }
 
 func (m Model) nextActionSummary() (string, string) {
@@ -991,9 +975,9 @@ func (m Model) rightPanelInnerWidth() int {
 
 func (m Model) conversationColumnWidths(contentWidth int) []int {
 	checkWidth := 4
-	updatedWidth := 16
-	stateWidth := 10
-	titleWidth := max(20, contentWidth-checkWidth-updatedWidth-stateWidth-3)
+	updatedWidth := 11
+	stateWidth := 8
+	titleWidth := max(18, contentWidth-checkWidth-updatedWidth-stateWidth-4)
 	return []int{checkWidth, titleWidth, updatedWidth, stateWidth}
 }
 
@@ -1034,6 +1018,24 @@ func pad(value string, width int) string {
 		return value
 	}
 	return lipgloss.NewStyle().Width(width).Render(value)
+}
+
+func padRightPlain(value string, width int) string {
+	if width <= 0 {
+		return ""
+	}
+	value = trim(value, width)
+	padding := max(0, width-lipgloss.Width(value))
+	return value + strings.Repeat(" ", padding)
+}
+
+func padLeftPlain(value string, width int) string {
+	if width <= 0 {
+		return ""
+	}
+	value = trim(value, width)
+	padding := max(0, width-lipgloss.Width(value))
+	return strings.Repeat(" ", padding) + value
 }
 
 func valueOrPlaceholder(value string) string {
@@ -1270,23 +1272,27 @@ func formatTableRow(widths []int, values ...string) string {
 func formatConversationRow(widths []int, values ...string) string {
 	parts := make([]string, 0, len(values))
 	for i, value := range values {
-		style := lipgloss.NewStyle().Width(widths[i]).Background(appBg)
 		if i >= 2 {
-			style = style.Align(lipgloss.Right)
+			parts = append(parts, padLeftPlain(value, widths[i]))
+			continue
 		}
-		parts = append(parts, style.Render(value))
+		parts = append(parts, padRightPlain(value, widths[i]))
 	}
 	return strings.Join(parts, " ")
 }
 
-func renderAlignedLine(width int, left, right string) string {
-	rightW := lipgloss.Width(right)
+func renderAlignedStyledTextLine(width int, left, right string, leftStyle, rightStyle lipgloss.Style) string {
+	rightLimit := max(8, min(width/3, width-2))
+	rightText := trim(right, rightLimit)
+	rightW := lipgloss.Width(rightText)
 	leftW := max(1, width-rightW-1)
-	return lipgloss.JoinHorizontal(
-		lipgloss.Top,
-		lipgloss.NewStyle().Width(leftW).MaxWidth(leftW).Render(left),
-		lipgloss.NewStyle().Width(width-leftW).Align(lipgloss.Right).Render(right),
-	)
+	leftText := trim(left, leftW)
+	gap := max(1, width-lipgloss.Width(leftText)-rightW)
+	return leftStyle.Render(leftText) + strings.Repeat(" ", gap) + rightStyle.Render(rightText)
+}
+
+func renderBoundedText(style lipgloss.Style, text string, width int) string {
+	return style.Render(padRightPlain(text, width))
 }
 
 func splitFixedWidth(total, parts, gap int) []int {
