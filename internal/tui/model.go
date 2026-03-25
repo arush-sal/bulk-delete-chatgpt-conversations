@@ -612,7 +612,7 @@ func (m Model) renderError(bodyH int) string {
 
 func (m Model) renderChrome() string {
 	w := m.contentWidth()
-	innerW := max(1, w-4)
+	innerW := innerWidthForStyle(headerBoxStyle, w)
 	meta := headerMetaStyle.Render(fmt.Sprintf("%s   %s", valueOrPlaceholder(m.version), runtime.Version()))
 	metaW := lipgloss.Width(meta)
 	titleW := max(1, innerW-metaW)
@@ -622,13 +622,12 @@ func (m Model) renderChrome() string {
 		lipgloss.NewStyle().Background(appBg).Width(metaW).Align(lipgloss.Right).Render(meta),
 	)
 
-	cardGap := 1
-	cardWidth := max(14, (innerW-(cardGap*3))/4)
+	cardWidths := splitFixedWidth(innerW, 4, 1)
 	cards := []string{
-		m.renderSummaryCard(cardWidth, "SESSION", valueOrPlaceholder(m.email), valueOrPlaceholder(m.sessionID)),
-		m.renderSummaryCard(cardWidth, "MODE", m.modeSummary(), m.modeSummaryDetail()),
-		m.renderSummaryCard(cardWidth, "CACHE", m.cacheSummary(), m.cacheSummaryDetail()),
-		m.renderSummaryCard(cardWidth, "SELECTION", m.selectionSummary(), m.selectionSummaryDetail()),
+		m.renderSummaryCard(cardWidths[0], "SESSION", valueOrPlaceholder(m.email), valueOrPlaceholder(m.sessionID)),
+		m.renderSummaryCard(cardWidths[1], "MODE", m.modeSummary(), m.modeSummaryDetail()),
+		m.renderSummaryCard(cardWidths[2], "CACHE", m.cacheSummary(), m.cacheSummaryDetail()),
+		m.renderSummaryCard(cardWidths[3], "SELECTION", m.selectionSummary(), m.selectionSummaryDetail()),
 	}
 	cardParts := make([]string, 0, len(cards)*2)
 	for i, card := range cards {
@@ -639,7 +638,7 @@ func (m Model) renderChrome() string {
 	}
 	cardRow := lipgloss.JoinHorizontal(lipgloss.Top, cardParts...)
 
-	return headerBoxStyle.Width(w).Render(lipgloss.JoinVertical(lipgloss.Left, titleRow, "", cardRow))
+	return headerBoxStyle.Width(innerW).Render(lipgloss.JoinVertical(lipgloss.Left, titleRow, "", cardRow))
 }
 
 func (m Model) renderConversationTable(height int) string {
@@ -693,7 +692,8 @@ func (m Model) renderConversationTable(height int) string {
 }
 
 func (m Model) renderWorkspaceLayout(bodyH int, leftRenderer func(int) string) string {
-	workspaceH := max(8, bodyH-6)
+	actionBarH := outerHeightForStyle(actionBarStyle, 1)
+	workspaceH := max(8, bodyH-actionBarH-2)
 	_, rightW := m.workspaceColumnWidths()
 
 	left := leftRenderer(workspaceH)
@@ -719,15 +719,12 @@ func (m Model) renderConversationListPane(height int) string {
 }
 
 func (m Model) renderSidebar(height int, width int) string {
-	innerH := max(6, height-3)
-	topH := max(5, innerH/3)
-	middleH := max(6, innerH/4)
-	bottomH := max(6, innerH-topH-middleH)
+	topH, middleH, bottomH := m.sidebarPanelHeights(height)
 
-	nextAction := m.renderPanelWithWidth("Next Action", m.renderNextActionPanel(), topH+3, width)
-	shortcuts := m.renderPanelWithWidth("keyboard first", m.renderShortcutsPanel(), middleH+3, width)
-	status := m.renderPanelWithWidth("Status Log", m.renderStatusLogPanel(bottomH), bottomH+3, width)
-	return lipgloss.JoinVertical(lipgloss.Left, nextAction, shortcuts, status)
+	nextAction := m.renderPanelWithWidth("Next Action", m.renderNextActionPanel(), topH, width)
+	shortcuts := m.renderPanelWithWidth("keyboard first", m.renderShortcutsPanel(), middleH, width)
+	status := m.renderPanelWithWidth("Status Log", m.renderStatusLogPanel(bottomH), bottomH, width)
+	return lipgloss.JoinVertical(lipgloss.Left, nextAction, "", shortcuts, "", status)
 }
 
 func (m Model) renderNextActionPanel() string {
@@ -786,7 +783,7 @@ func (m Model) renderStatusLogPanel(height int) string {
 	if len(lines) == 0 {
 		lines = []string{"Waiting for events..."}
 	}
-	return logViewportStyle.Width(m.rightPanelInnerWidth()).Height(height).Render(strings.Join(lines, "\n"))
+	return logViewportStyle.Width(m.rightPanelInnerWidth()).Height(max(1, height-panelBodyFrameHeight())).Render(strings.Join(lines, "\n"))
 }
 
 func (m Model) renderActionBar() string {
@@ -818,27 +815,32 @@ func (m Model) renderActionBar() string {
 	}
 
 	content := lipgloss.JoinHorizontal(lipgloss.Top, archive, "   ", deleteAction, "   ", cancel)
-	return actionBarStyle.Width(m.contentWidth()).Render(content)
+	return actionBarStyle.Width(innerWidthForStyle(actionBarStyle, m.contentWidth())).Render(content)
 }
 
 func (m Model) renderSummaryCard(width int, title, value, detail string) string {
+	innerW := innerWidthForStyle(summaryCardStyle, width)
 	content := lipgloss.JoinVertical(
 		lipgloss.Left,
 		summaryTitleStyle.Render(title),
-		summaryValueStyle.Render(trim(value, width-4)),
-		summarySubtleStyle.Render(trim(detail, width-4)),
+		summaryValueStyle.Width(innerW).Render(trim(value, innerW)),
+		summarySubtleStyle.Width(innerW).Render(trim(detail, innerW)),
 	)
-	return summaryCardStyle.Width(width).Render(content)
+	return summaryCardStyle.Width(innerW).Render(content)
 }
 
 func (m Model) renderFilterLine() string {
+	filterLabel := "/ all conversations"
 	if m.filtering {
-		return filterActiveStyle.Render("/ " + m.filterText + "█   sort " + sortLabels[m.sortBy])
+		filterLabel = "/ " + m.filterText + "█"
+	} else if m.filterText != "" {
+		filterLabel = "/ " + m.filterText
 	}
-	if m.filterText != "" {
-		return filterStyle.Render("/ " + m.filterText + "   sort " + sortLabels[m.sortBy])
-	}
-	return filterStyle.Render("/ all conversations   sort " + sortLabels[m.sortBy])
+	return renderAlignedLine(
+		m.leftPanelInnerWidth(),
+		filterStyle.Render(filterLabel),
+		tableMetaStyle.Render("sort "+sortLabels[m.sortBy]),
+	)
 }
 
 func (m Model) selectionFooterLine() string {
@@ -846,7 +848,11 @@ func (m Model) selectionFooterLine() string {
 	if len(m.filtered) > 0 {
 		cursor = m.cursor + 1
 	}
-	return fmt.Sprintf("Visible %d of %d   Cursor row %d of %d", len(m.filtered), len(m.conversations), cursor, len(m.filtered))
+	return renderAlignedLine(
+		m.leftPanelInnerWidth(),
+		fmt.Sprintf("Visible %d of %d", len(m.filtered), len(m.conversations)),
+		fmt.Sprintf("Cursor row %d of %d", cursor, len(m.filtered)),
+	)
 }
 
 func (m Model) modeSummary() string {
@@ -951,10 +957,16 @@ func (m Model) nextActionSummary() (string, string) {
 
 func (m Model) workspaceColumnWidths() (int, int) {
 	total := m.contentWidth()
-	left := max(48, total*68/100)
-	right := max(24, total-left-1)
-	if left+right+1 > total {
-		left = total - right - 1
+	available := max(1, total-1)
+	left := available * 68 / 100
+	right := available - left
+	if left < 48 && available >= 48+24 {
+		left = 48
+		right = available - left
+	}
+	if right < 24 && available >= 48+24 {
+		right = 24
+		left = available - right
 	}
 	return left, right
 }
@@ -983,6 +995,27 @@ func (m Model) conversationColumnWidths(contentWidth int) []int {
 	stateWidth := 10
 	titleWidth := max(20, contentWidth-checkWidth-updatedWidth-stateWidth-3)
 	return []int{checkWidth, titleWidth, updatedWidth, stateWidth}
+}
+
+func (m Model) sidebarPanelHeights(total int) (int, int, int) {
+	available := max(3, total-2)
+	top := 8
+	middle := 8
+	if available < top+middle+6 {
+		top = max(5, available/3)
+		middle = max(5, available/4)
+	}
+	bottom := available - top - middle
+	if bottom < 6 {
+		short := 6 - bottom
+		if middle-short >= 5 {
+			middle -= short
+		} else if top-short >= 5 {
+			top -= short
+		}
+		bottom = available - top - middle
+	}
+	return top, middle, max(6, bottom)
 }
 
 func trim(value string, width int) string {
@@ -1185,12 +1218,12 @@ func (m Model) renderPanelSized(title, body string, height int) string {
 }
 
 func (m Model) renderPanelWithWidth(title, body string, height int, width int) string {
-	innerW := max(1, width-4)
+	innerW := innerWidthForStyle(panelStyle, width)
 	titleLine := panelTitleStyle.Width(innerW).Background(appBg).Render(title)
 	clampedBody := body
 
 	if height > 0 {
-		bodyH := max(1, height-3)
+		bodyH := max(1, height-panelBodyFrameHeight())
 		clampedBody = lipgloss.NewStyle().
 			Width(innerW).
 			Height(bodyH).
@@ -1200,7 +1233,7 @@ func (m Model) renderPanelWithWidth(title, body string, height int, width int) s
 			Render(body)
 	}
 
-	return panelStyle.Width(width).Render(
+	return panelStyle.Width(innerW).Render(
 		lipgloss.JoinVertical(lipgloss.Left, titleLine, clampedBody),
 	)
 }
@@ -1244,6 +1277,45 @@ func formatConversationRow(widths []int, values ...string) string {
 		parts = append(parts, style.Render(value))
 	}
 	return strings.Join(parts, " ")
+}
+
+func renderAlignedLine(width int, left, right string) string {
+	rightW := lipgloss.Width(right)
+	leftW := max(1, width-rightW-1)
+	return lipgloss.JoinHorizontal(
+		lipgloss.Top,
+		lipgloss.NewStyle().Width(leftW).MaxWidth(leftW).Render(left),
+		lipgloss.NewStyle().Width(width-leftW).Align(lipgloss.Right).Render(right),
+	)
+}
+
+func splitFixedWidth(total, parts, gap int) []int {
+	if parts <= 0 {
+		return nil
+	}
+	available := max(parts, total-gap*(parts-1))
+	base := available / parts
+	remainder := available % parts
+	widths := make([]int, parts)
+	for i := 0; i < parts; i++ {
+		widths[i] = base
+		if i < remainder {
+			widths[i]++
+		}
+	}
+	return widths
+}
+
+func innerWidthForStyle(style lipgloss.Style, outer int) int {
+	return max(1, outer-style.GetHorizontalFrameSize())
+}
+
+func outerHeightForStyle(style lipgloss.Style, contentRows int) int {
+	return max(1, contentRows+style.GetVerticalFrameSize())
+}
+
+func panelBodyFrameHeight() int {
+	return panelStyle.GetVerticalFrameSize() + 1
 }
 
 func wrapLines(s string, width int) []string {

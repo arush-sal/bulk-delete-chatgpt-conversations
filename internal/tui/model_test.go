@@ -1,11 +1,13 @@
 package tui
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/arush-sal/bulk-delete-chatgpt-conversations/internal/chatgpt"
+	"github.com/charmbracelet/lipgloss"
 )
 
 func TestUpdateActionFinishedReturnsToSelectionAfterDelete(t *testing.T) {
@@ -221,6 +223,63 @@ func TestViewSelectionLayoutIncludesSummaryCardsAndSidebarPanels(t *testing.T) {
 			t.Fatalf("View() missing %q\n%s", want, view)
 		}
 	}
+}
+
+func TestViewSelectionLayoutKeepsDashboardPanelsAligned(t *testing.T) {
+	model := Model{
+		phase:     phaseSelect,
+		width:     120,
+		height:    36,
+		email:     "user@example.com",
+		sessionID: "sess-123",
+		version:   "vtest",
+		logs: []string{
+			"Starting browser auth",
+			"Loaded cached conversations",
+			"Synced latest conversations",
+		},
+		conversations: []chatgpt.Conversation{
+			{ID: "1", Title: "Alpha conversation with a moderately long title"},
+			{ID: "2", Title: "Beta", IsArchived: true},
+			{ID: "3", Title: "Gamma"},
+		},
+		selected: map[string]struct{}{
+			"1": {},
+		},
+	}
+	model.applyFilterAndSort()
+
+	view := stripANSI(model.View().Content)
+	lines := strings.Split(view, "\n")
+
+	for _, line := range lines {
+		if lipgloss.Width(line) > model.width {
+			t.Fatalf("rendered line width %d exceeds budget %d: %q", lipgloss.Width(line), model.width, line)
+		}
+	}
+
+	foundCardRow := false
+	foundSplitRow := false
+	for _, line := range lines {
+		if strings.Contains(line, "SESSION") && strings.Contains(line, "MODE") && strings.Contains(line, "CACHE") && strings.Contains(line, "SELECTION") {
+			foundCardRow = true
+		}
+		if strings.Contains(line, "Conversations") && strings.Contains(line, "Next Action") {
+			foundSplitRow = true
+		}
+	}
+
+	if !foundCardRow {
+		t.Fatalf("dashboard header cards did not render in one row\n%s", view)
+	}
+	if !foundSplitRow {
+		t.Fatalf("dashboard body columns did not render in one row\n%s", view)
+	}
+}
+
+func stripANSI(value string) string {
+	re := regexp.MustCompile(`\x1b\[[0-9;]*[A-Za-z]`)
+	return re.ReplaceAllString(value, "")
 }
 
 func TestToggleCurrentIgnoresStaleNegativeCursor(t *testing.T) {
