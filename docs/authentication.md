@@ -42,5 +42,5 @@ If the auth file is missing and you run `chatgpt-bulk` in an interactive termina
 ## Testing notes
 
 - `go test ./...` covers auth-state persistence, command wiring, and an end-to-end-style `chatgpt-bulk login` command test using a stubbed auth client.
-- For repeatable live verification, run the Go-based manual harness documented in [docs/manual-auth-e2e.md](./manual-auth-e2e.md).
+- For repeatable live verification, run the Go-based manual harness documented in [docs/manual-auth-e2e.md](./manual-auth-e2e.md). With no stage flags it runs the full missing-auth, session-only, and permanent-auth suite.
 - Automated tests still do not complete a real ChatGPT sign-in; browser login and challenges remain manual.
