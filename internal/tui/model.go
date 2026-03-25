@@ -182,7 +182,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case actionFinishedMsg:
 		m.results = msg.results
-		m.phase = phaseDone
+		m.reconcileActionResults(msg.results)
+		if len(m.conversations) == 0 {
+			m.phase = phaseDone
+		} else {
+			m.phase = phaseSelect
+		}
 		return m, nil
 	case tea.KeyPressMsg:
 		switch m.phase {
@@ -197,7 +202,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case phaseConfirm:
 			return m.updateConfirmation(msg)
 		case phaseDone, phaseError:
-			if isConfirmKey(msg) || isQuitKey(msg) || isBackKey(msg) {
+			if isQuitKey(msg) || (m.phase == phaseError && (isConfirmKey(msg) || isBackKey(msg))) {
 				return m, tea.Quit
 			}
 		}
@@ -269,7 +274,7 @@ func (m Model) shortcutHints() string {
 	case phaseRunning:
 		return "q quit"
 	case phaseDone:
-		return "enter exit   q quit"
+		return "q quit"
 	case phaseError:
 		return "enter exit   q quit"
 	default:
@@ -456,6 +461,37 @@ func (m *Model) clampCursor() {
 	}
 }
 
+func (m *Model) reconcileActionResults(results []actionResult) {
+	if len(results) == 0 {
+		m.selected = make(map[string]struct{})
+		m.actionCursor = 0
+		m.applyFilterAndSort()
+		return
+	}
+
+	successful := make(map[string]struct{}, len(results))
+	for _, result := range results {
+		if result.err == nil {
+			successful[result.id] = struct{}{}
+			delete(m.selected, result.id)
+		}
+	}
+
+	if len(successful) > 0 {
+		next := m.conversations[:0]
+		for _, conv := range m.conversations {
+			if _, ok := successful[conv.ID]; ok {
+				continue
+			}
+			next = append(next, conv)
+		}
+		m.conversations = next
+	}
+
+	m.actionCursor = 0
+	m.applyFilterAndSort()
+}
+
 func (m Model) selectedAction() actionChoice {
 	return actionChoice(m.actionCursor)
 }
@@ -477,10 +513,6 @@ func (m Model) renderSelection(bodyH int) string {
 		return m.renderPanelSized("Conversations", statusPanelStyle.Width(m.contentWidth()).Render("No conversations found for this account."), bodyH)
 	}
 
-	// Panel overhead: 2 (borders) + 1 (panelTitle) + 1 (metaLine) = 4 rows.
-	// tableHeight fills the remaining content area exactly.
-	tableHeight := max(8, bodyH-4)
-
 	// Build meta line with filter and sort info
 	metaParts := []string{
 		fmt.Sprintf("%d/%d shown", len(m.filtered), len(m.conversations)),
@@ -497,10 +529,10 @@ func (m Model) renderSelection(bodyH int) string {
 		filterLine = filterStyle.Render("/ " + m.filterText)
 	}
 
+	tableHeight := m.selectionTableHeight(bodyH)
 	bodyParts := []string{metaLine}
 	if filterLine != "" {
 		bodyParts = append(bodyParts, filterLine)
-		tableHeight -= 1
 	}
 	bodyParts = append(bodyParts, m.renderConversationTable(tableHeight))
 
@@ -1089,12 +1121,24 @@ func matchesRune(msg tea.KeyPressMsg, want string) bool {
 	return strings.EqualFold(msg.String(), want)
 }
 
-// pageSize returns the number of items to skip on PgUp/PgDn, derived from
-// the stored terminal height using the same formula as visibleRange.
+// pageSize returns the number of items to skip on PgUp/PgDn using the same
+// layout calculation as the rendered selection pane.
 func (m Model) pageSize() int {
 	h := max(24, m.height)
-	// Mirror View(): bodyH accounts for header (~8 rows) and top padding (1).
-	bodyH := h - 8 - 1
-	tableH := max(8, bodyH-4)
-	return max(1, tableH-1) // -1 for the table header row
+	headerH := lipgloss.Height(m.renderChrome())
+	bodyH := h - headerH - 2
+	if bodyH < 0 {
+		bodyH = 0
+	}
+	return max(1, m.selectionTableHeight(bodyH)-1) // -1 for the table header row
+}
+
+func (m Model) selectionTableHeight(bodyH int) int {
+	// Panel overhead: 2 (borders) + 1 (panelTitle) + 1 (metaLine) = 4 rows.
+	// The optional filter line consumes one more row.
+	tableHeight := max(8, bodyH-4)
+	if m.filterText != "" || m.filtering {
+		tableHeight--
+	}
+	return max(8, tableHeight)
 }

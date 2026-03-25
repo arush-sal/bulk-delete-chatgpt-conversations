@@ -7,6 +7,97 @@ import (
 	"github.com/arush-sal/bulk-delete-chatgpt-conversations/internal/chatgpt"
 )
 
+func TestUpdateActionFinishedReturnsToSelectionAfterDelete(t *testing.T) {
+	model := Model{
+		phase:        phaseRunning,
+		actionCursor: int(actionDelete),
+		conversations: []chatgpt.Conversation{
+			{ID: "1", Title: "alpha"},
+			{ID: "2", Title: "beta"},
+			{ID: "3", Title: "gamma"},
+		},
+		selected: map[string]struct{}{
+			"1": {},
+			"2": {},
+		},
+	}
+	model.applyFilterAndSort()
+
+	gotModel, cmd := model.Update(actionFinishedMsg{results: []actionResult{
+		{id: "1", label: "alpha"},
+		{id: "2", label: "beta"},
+	}})
+	got, ok := gotModel.(Model)
+	if !ok {
+		t.Fatalf("Update() returned %T, want tui.Model", gotModel)
+	}
+	if cmd != nil {
+		t.Fatalf("Update() cmd = non-nil, want nil")
+	}
+	if got.phase != phaseSelect {
+		t.Fatalf("phase after delete completion = %v, want %v", got.phase, phaseSelect)
+	}
+	if len(got.conversations) != 1 || got.conversations[0].ID != "3" {
+		t.Fatalf("remaining conversations = %+v, want only ID 3", got.conversations)
+	}
+	if len(got.selected) != 0 {
+		t.Fatalf("selected after delete completion = %v, want empty", got.selected)
+	}
+}
+
+func TestUpdateActionFinishedReturnsToSelectionAfterArchiveWithFailures(t *testing.T) {
+	model := Model{
+		phase:        phaseRunning,
+		actionCursor: int(actionArchive),
+		conversations: []chatgpt.Conversation{
+			{ID: "1", Title: "alpha"},
+			{ID: "2", Title: "beta"},
+			{ID: "3", Title: "gamma"},
+		},
+		selected: map[string]struct{}{
+			"1": {},
+			"2": {},
+		},
+	}
+	model.applyFilterAndSort()
+
+	gotModel, cmd := model.Update(actionFinishedMsg{results: []actionResult{
+		{id: "1", label: "alpha"},
+		{id: "2", label: "beta", err: errTestActionFailed{}},
+	}})
+	got, ok := gotModel.(Model)
+	if !ok {
+		t.Fatalf("Update() returned %T, want tui.Model", gotModel)
+	}
+	if cmd != nil {
+		t.Fatalf("Update() cmd = non-nil, want nil")
+	}
+	if got.phase != phaseSelect {
+		t.Fatalf("phase after archive completion = %v, want %v", got.phase, phaseSelect)
+	}
+	if len(got.conversations) != 2 || got.conversations[0].ID != "2" || got.conversations[1].ID != "3" {
+		t.Fatalf("remaining conversations = %+v, want IDs 2 and 3", got.conversations)
+	}
+	if _, ok := got.selected["2"]; !ok {
+		t.Fatalf("failed archive should remain selected, got selected = %v", got.selected)
+	}
+	if _, ok := got.selected["1"]; ok {
+		t.Fatalf("successful archive should be cleared from selection, got selected = %v", got.selected)
+	}
+}
+
+func TestUpdatePhaseDoneQuitsOnQ(t *testing.T) {
+	model := Model{phase: phaseDone}
+
+	_, cmd := model.Update(tea.KeyPressMsg(tea.Key{Text: "q", Code: 'q'}))
+	if cmd == nil {
+		t.Fatal("Update() cmd = nil, want quit command")
+	}
+	if _, ok := cmd().(tea.QuitMsg); !ok {
+		t.Fatalf("cmd() = %T, want tea.QuitMsg", cmd())
+	}
+}
+
 func TestUpdateSelectionPageDownKeepsCursorValidWhenFilterHasNoResults(t *testing.T) {
 	model := Model{
 		phase:      phaseSelect,
@@ -31,6 +122,62 @@ func TestUpdateSelectionPageDownKeepsCursorValidWhenFilterHasNoResults(t *testin
 	}
 	if len(got.filtered) != 0 {
 		t.Fatalf("filtered count = %d, want 0", len(got.filtered))
+	}
+}
+
+func TestUpdateSelectionPageDownUsesRenderedSelectionHeight(t *testing.T) {
+	model := Model{
+		phase:      phaseSelect,
+		width:      80,
+		height:     24,
+		filterText: "chat",
+		selected:   make(map[string]struct{}),
+	}
+	for i := 0; i < 20; i++ {
+		model.conversations = append(model.conversations, chatgpt.Conversation{
+			ID:    string(rune('a' + i)),
+			Title: "chat",
+		})
+	}
+	model.applyFilterAndSort()
+
+	gotModel, _ := model.updateSelection(tea.KeyPressMsg(tea.Key{Code: tea.KeyPgDown}))
+	got, ok := gotModel.(Model)
+	if !ok {
+		t.Fatalf("updateSelection() returned %T, want tui.Model", gotModel)
+	}
+
+	if got.cursor != 8 {
+		t.Fatalf("cursor after pgdown with active filter = %d, want 8", got.cursor)
+	}
+}
+
+func TestUpdateSelectionPageUpUsesRenderedSelectionHeight(t *testing.T) {
+	model := Model{
+		phase:      phaseSelect,
+		width:      80,
+		height:     24,
+		filterText: "chat",
+		cursor:     18,
+		selected:   make(map[string]struct{}),
+	}
+	for i := 0; i < 20; i++ {
+		model.conversations = append(model.conversations, chatgpt.Conversation{
+			ID:    string(rune('a' + i)),
+			Title: "chat",
+		})
+	}
+	model.applyFilterAndSort()
+	model.cursor = 18
+
+	gotModel, _ := model.updateSelection(tea.KeyPressMsg(tea.Key{Code: tea.KeyPgUp}))
+	got, ok := gotModel.(Model)
+	if !ok {
+		t.Fatalf("updateSelection() returned %T, want tui.Model", gotModel)
+	}
+
+	if got.cursor != 10 {
+		t.Fatalf("cursor after pgup with active filter = %d, want 10", got.cursor)
 	}
 }
 
@@ -114,4 +261,10 @@ func TestEmptyCacheLoadWaitsForRefresh(t *testing.T) {
 	if len(got.conversations) != 0 {
 		t.Fatalf("conversations after empty cache load = %#v, want empty", got.conversations)
 	}
+}
+
+type errTestActionFailed struct{}
+
+func (errTestActionFailed) Error() string {
+	return "action failed"
 }
