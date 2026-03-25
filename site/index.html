@@ -76,135 +76,251 @@
         <div class="hero-stage" aria-label="chatgpt-bulk application preview">
           <div class="tui-shell">
             <div class="tui-titlebar">
-              <span class="traffic-lights" aria-hidden="true">
-                <span></span>
-                <span></span>
-                <span></span>
-              </span>
-              <span class="tui-title">chatgpt-bulk</span>
-              <span class="tui-path">cleanup-session.tui</span>
+              <span class="tui-title">bulk-delete-chatgpt-conversations</span>
+              <span class="tui-badge">select</span>
             </div>
 
-            <div class="tui-summary">
-              <div class="summary-cell">
-                <span class="summary-label">session</span>
-                <strong>authenticated</strong>
-                <span class="summary-value">chrome login complete</span>
-              </div>
-              <div class="summary-cell">
-                <span class="summary-label">mode</span>
-                <strong>session-only</strong>
-                <span class="summary-value">no auth file written</span>
-              </div>
-              <div class="summary-cell">
-                <span class="summary-label">cache</span>
-                <strong>warm start</strong>
-                <span class="summary-value">219 chats available</span>
-              </div>
-              <div class="summary-cell">
-                <span class="summary-label">selection</span>
-                <strong>3 rows marked</strong>
-                <span class="summary-value">archive queued</span>
-              </div>
+            <div class="tui-infobar">
+              <span>Email reduro.sh</span>
+              <span class="tui-sep">|</span>
+              <span>Session e9.f96dcl..fa2c-g</span>
+              <span class="tui-sep">|</span>
+              <span>dev</span>
+              <span class="tui-sep">|</span>
+              <span>Go go1.24.8</span>
             </div>
 
-            <div class="tui-body">
-              <section class="tui-panel tui-panel-main">
-                <div class="tui-panel-header">
-                  <span>conversation list</span>
-                  <span>query=/invoice sort=date desc</span>
-                </div>
-
-                <div class="tui-table-head">
-                  <span class="col-chat">conversation</span>
-                  <span class="col-date">updated</span>
-                  <span class="col-state">state</span>
-                </div>
-
-                <div class="tui-row tui-row-active">
-                  <span class="tui-marker tui-marker-on"></span>
-                  <span class="col-chat">2025 invoice imports</span>
-                  <span class="col-date">today</span>
-                  <span class="col-state col-state-selected">selected</span>
-                </div>
-                <div class="tui-row">
-                  <span class="tui-marker tui-marker-on"></span>
-                  <span class="col-chat">Expense reconciliation prompts</span>
-                  <span class="col-date">today</span>
-                  <span class="col-state col-state-selected">selected</span>
-                </div>
-                <div class="tui-row">
-                  <span class="tui-marker"></span>
-                  <span class="col-chat">TUI cursor bug thread</span>
-                  <span class="col-date">Mar 17</span>
-                  <span class="col-state">visible</span>
-                </div>
-                <div class="tui-row">
-                  <span class="tui-marker tui-marker-on"></span>
-                  <span class="col-chat">Unused brainstorming chats</span>
-                  <span class="col-date">Mar 11</span>
-                  <span class="col-state col-state-selected">selected</span>
-                </div>
-                <div class="tui-row">
-                  <span class="tui-marker"></span>
-                  <span class="col-chat">Browser auth regression</span>
-                  <span class="col-date">Mar 07</span>
-                  <span class="col-state">visible</span>
-                </div>
-
-                <div class="tui-footline">
-                  <span>visible 12 / 219</span>
-                  <span>cursor row 1</span>
-                  <span>space toggles selection</span>
-                </div>
-              </section>
-
-              <aside class="tui-side">
-                <div class="tui-panel">
-                  <div class="tui-panel-header">
-                    <span>next action</span>
-                    <span>enter confirms</span>
-                  </div>
-                  <div class="queue-copy">
-                    <strong>Archive selected conversations</strong>
-                    <p>Clear invoice-related chats from the sidebar while keeping them recoverable.</p>
-                  </div>
-                </div>
-
-                <div class="tui-panel">
-                  <div class="tui-panel-header">
-                    <span>shortcuts</span>
-                    <span>keyboard first</span>
-                  </div>
-                  <div class="shortcut-list">
-                    <span><kbd>/</kbd> filter</span>
-                    <span><kbd>space</kbd> toggle row</span>
-                    <span><kbd>a</kbd> select all</span>
-                    <span><kbd>s</kbd> sort</span>
-                    <span><kbd>esc</kbd> cancel</span>
-                    <span><kbd>q</kbd> quit</span>
-                  </div>
-                </div>
-
-                <div class="tui-panel">
-                  <div class="tui-panel-header">
-                    <span>status log</span>
-                    <span>live</span>
-                  </div>
-                  <div class="status-log">
-                    <span>auth token refreshed</span>
-                    <span>conversation cache loaded</span>
-                    <span>3 rows added to archive queue</span>
-                  </div>
-                </div>
-              </aside>
+            <div class="tui-shortcuts">
+              <span class="shortcut-pill"><kbd>&lt;/&gt;</kbd> Arrows</span>
+              <span class="shortcut-pill"><kbd>&lt;space&gt;</kbd> select</span>
+              <span class="shortcut-pill"><kbd>&lt;tab&gt;</kbd> sort</span>
+              <span class="shortcut-pill"><kbd>&lt;/&gt;</kbd> filter</span>
+              <span class="shortcut-pill"><kbd>&lt;x&gt;</kbd> sort</span>
+              <span class="shortcut-pill shortcut-pill-accent"><kbd>&lt;enter&gt;</kbd> delete</span>
+              <span class="shortcut-pill"><kbd>&lt;q&gt;</kbd> quit</span>
             </div>
 
-            <div class="tui-commandbar">
-              <span class="command-pill command-pill-primary">archive selected</span>
-              <span class="command-pill">delete selected</span>
-              <span class="command-pill">cancel</span>
-              <span class="command-note">real browser auth first, terminal cleanup second</span>
+            <div class="tui-conversation-header">
+              <span class="tui-conv-title">Conversations [131]</span>
+            </div>
+
+            <div class="tui-filterbar">
+              <span class="tui-filter-input">/ partial chat...</span>
+              <span class="tui-filter-sort">sort: Date &#9650;</span>
+            </div>
+
+            <div class="tui-table">
+              <div class="tui-table-head">
+                <span class="col-select">Select</span>
+                <span class="col-num">#</span>
+                <span class="col-title">Conversation Title</span>
+                <span class="col-date">Date</span>
+                <span class="col-age">Age</span>
+              </div>
+
+              <div class="tui-row tui-row-active">
+                <span class="col-select"><span class="tui-check tui-check-on"></span></span>
+                <span class="col-num">0</span>
+                <span class="col-title">Fix todo vs RC 1000</span>
+                <span class="col-date">2025-05-01</span>
+                <span class="col-age">2mt</span>
+              </div>
+              <div class="tui-row">
+                <span class="col-select"><span class="tui-check"></span></span>
+                <span class="col-num">1</span>
+                <span class="col-title">Python API auto-promotion</span>
+                <span class="col-date">2025-08-21</span>
+                <span class="col-age">7mo</span>
+              </div>
+              <div class="tui-row">
+                <span class="col-select"><span class="tui-check tui-check-on"></span></span>
+                <span class="col-num">1</span>
+                <span class="col-title">SOC 3 compliance placeholder</span>
+                <span class="col-date">2025-08-11</span>
+                <span class="col-age">7mo</span>
+              </div>
+              <div class="tui-row">
+                <span class="col-select"><span class="tui-check"></span></span>
+                <span class="col-num">1</span>
+                <span class="col-title">Snowflake MFA rollout</span>
+                <span class="col-date">2025-08-09</span>
+                <span class="col-age">7mo</span>
+              </div>
+              <div class="tui-row">
+                <span class="col-select"><span class="tui-check"></span></span>
+                <span class="col-num">1</span>
+                <span class="col-title">Instruction hijacking test</span>
+                <span class="col-date">2025-08-09</span>
+                <span class="col-age">7mo</span>
+              </div>
+              <div class="tui-row">
+                <span class="col-select"><span class="tui-check"></span></span>
+                <span class="col-num">1</span>
+                <span class="col-title">SOA accessibility check</span>
+                <span class="col-date">2025-08-09</span>
+                <span class="col-age">7mo</span>
+              </div>
+              <div class="tui-row">
+                <span class="col-select"><span class="tui-check"></span></span>
+                <span class="col-num">1</span>
+                <span class="col-title">Cache entry acknowledgement</span>
+                <span class="col-date">2025-08-09</span>
+                <span class="col-age">7mo</span>
+              </div>
+              <div class="tui-row">
+                <span class="col-select"><span class="tui-check"></span></span>
+                <span class="col-num">1</span>
+                <span class="col-title">Retrieve Python offer</span>
+                <span class="col-date">2025-08-08</span>
+                <span class="col-age">7mo</span>
+              </div>
+              <div class="tui-row">
+                <span class="col-select"><span class="tui-check tui-check-on"></span></span>
+                <span class="col-num">1</span>
+                <span class="col-title">Bomb Log Analysis</span>
+                <span class="col-date">2025-08-04</span>
+                <span class="col-age">7mo</span>
+              </div>
+              <div class="tui-row">
+                <span class="col-select"><span class="tui-check"></span></span>
+                <span class="col-num">1</span>
+                <span class="col-title">JWT Missing Templates Analysis</span>
+                <span class="col-date">2025-05-21</span>
+                <span class="col-age">1mo</span>
+              </div>
+              <div class="tui-row">
+                <span class="col-select"><span class="tui-check"></span></span>
+                <span class="col-num">1</span>
+                <span class="col-title">PRivacy Risk Assistant</span>
+                <span class="col-date">2025-05-21</span>
+                <span class="col-age">1mo</span>
+              </div>
+              <div class="tui-row">
+                <span class="col-select"><span class="tui-check"></span></span>
+                <span class="col-num">1</span>
+                <span class="col-title">Dynamic Code Execution Alternatives</span>
+                <span class="col-date">2025-05-18</span>
+                <span class="col-age">1mo</span>
+              </div>
+              <div class="tui-row">
+                <span class="col-select"><span class="tui-check"></span></span>
+                <span class="col-num">1</span>
+                <span class="col-title">Tenant restriction policy test</span>
+                <span class="col-date">2025-05-15</span>
+                <span class="col-age">1mo</span>
+              </div>
+              <div class="tui-row">
+                <span class="col-select"><span class="tui-check"></span></span>
+                <span class="col-num">1</span>
+                <span class="col-title">Product Security Huddle Plan</span>
+                <span class="col-date">2025-05-11</span>
+                <span class="col-age">14mo</span>
+              </div>
+              <div class="tui-row">
+                <span class="col-select"><span class="tui-check"></span></span>
+                <span class="col-num">1</span>
+                <span class="col-title">Root Chain Bypass Guide</span>
+                <span class="col-date">2025-05-11</span>
+                <span class="col-age">14mo</span>
+              </div>
+              <div class="tui-row">
+                <span class="col-select"><span class="tui-check"></span></span>
+                <span class="col-num">1</span>
+                <span class="col-title">OCI Pentesting Resources</span>
+                <span class="col-date">2025-04-11</span>
+                <span class="col-age">14mo</span>
+              </div>
+              <div class="tui-row">
+                <span class="col-select"><span class="tui-check"></span></span>
+                <span class="col-num">1</span>
+                <span class="col-title">Framework Automation Risk Plan</span>
+                <span class="col-date">2021-03-18</span>
+                <span class="col-age">12mo</span>
+              </div>
+              <div class="tui-row">
+                <span class="col-select"><span class="tui-check"></span></span>
+                <span class="col-num">1</span>
+                <span class="col-title">NSAIEmailLocalNetworking Security Risks</span>
+                <span class="col-date">2021-03-18</span>
+                <span class="col-age">12mo</span>
+              </div>
+              <div class="tui-row">
+                <span class="col-select"><span class="tui-check"></span></span>
+                <span class="col-num">1</span>
+                <span class="col-title">ITSC SOC Audit Experience</span>
+                <span class="col-date">2025-03-09</span>
+                <span class="col-age">12mo</span>
+              </div>
+              <div class="tui-row">
+                <span class="col-select"><span class="tui-check"></span></span>
+                <span class="col-num">1</span>
+                <span class="col-title">Docker Swap Management Solutions</span>
+                <span class="col-date">2025-03-03</span>
+                <span class="col-age">12mo</span>
+              </div>
+              <div class="tui-row">
+                <span class="col-select"><span class="tui-check"></span></span>
+                <span class="col-num">1</span>
+                <span class="col-title">MIS Proxy Control Test Cases</span>
+                <span class="col-date">2025-02-28</span>
+                <span class="col-age">12mo</span>
+              </div>
+              <div class="tui-row">
+                <span class="col-select"><span class="tui-check"></span></span>
+                <span class="col-num">1</span>
+                <span class="col-title">Malware Dev Detection Evasion</span>
+                <span class="col-date">2025-02-02</span>
+                <span class="col-age">28</span>
+              </div>
+              <div class="tui-row">
+                <span class="col-select"><span class="tui-check"></span></span>
+                <span class="col-num">1</span>
+                <span class="col-title">Safe File Extension Handling</span>
+                <span class="col-date">2025-02-02</span>
+                <span class="col-age">28</span>
+              </div>
+              <div class="tui-row">
+                <span class="col-select"><span class="tui-check"></span></span>
+                <span class="col-num">1</span>
+                <span class="col-title">Simplifying Deserialization Gadgets</span>
+                <span class="col-date">2025-01-07</span>
+                <span class="col-age">2yr</span>
+              </div>
+              <div class="tui-row">
+                <span class="col-select"><span class="tui-check"></span></span>
+                <span class="col-num">1</span>
+                <span class="col-title">TemplateCache deserialization Exploits</span>
+                <span class="col-date">2025-01-07</span>
+                <span class="col-age">2yr</span>
+              </div>
+              <div class="tui-row">
+                <span class="col-select"><span class="tui-check"></span></span>
+                <span class="col-num">1</span>
+                <span class="col-title">Java System Command Execution</span>
+                <span class="col-date">2025-01-07</span>
+                <span class="col-age">2yr</span>
+              </div>
+              <div class="tui-row">
+                <span class="col-select"><span class="tui-check"></span></span>
+                <span class="col-num">1</span>
+                <span class="col-title">AES 256-CBC Encryption</span>
+                <span class="col-date">2024-07-07</span>
+                <span class="col-age">2yr</span>
+              </div>
+              <div class="tui-row">
+                <span class="col-select"><span class="tui-check"></span></span>
+                <span class="col-num">1</span>
+                <span class="col-title">GraphQL Schema in Java</span>
+                <span class="col-date">2024-07-07</span>
+                <span class="col-age">2yr</span>
+              </div>
+              <div class="tui-row">
+                <span class="col-select"><span class="tui-check"></span></span>
+                <span class="col-num">1</span>
+                <span class="col-title">Student IT Scrum Template</span>
+                <span class="col-date">2024-07-07</span>
+                <span class="col-age">2yr</span>
+              </div>
             </div>
           </div>
         </div>

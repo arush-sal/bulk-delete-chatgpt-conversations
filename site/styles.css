@@ -321,86 +321,197 @@ h1 {
     inset 0 1px 0 rgba(255, 255, 255, 0.03);
 }
 
-.tui-shell,
-.tui-summary,
-.tui-body,
-.shortcut-list,
-.status-log {
-  display: grid;
-}
-
 .tui-shell {
-  gap: 12px;
-}
-
-.tui-titlebar,
-.summary-cell,
-.tui-panel,
-.tui-commandbar {
-  border: 1px solid rgba(244, 236, 222, 0.1);
-  background: rgba(18, 25, 33, 0.94);
+  display: flex;
+  flex-direction: column;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.72rem;
+  line-height: 1.5;
+  overflow: hidden;
 }
 
 .tui-titlebar {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 14px 16px;
-  border-radius: 10px;
-  border-color: rgba(244, 236, 222, 0.14);
-  background:
-    linear-gradient(180deg, rgba(9, 12, 17, 1), rgba(4, 6, 9, 1));
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.04),
-    0 8px 20px rgba(0, 0, 0, 0.22);
-  color: rgba(245, 241, 232, 0.86);
-  font-size: 0.8rem;
+  justify-content: space-between;
+  padding: 8px 14px;
+  background: rgba(18, 22, 30, 0.98);
+  border-bottom: 1px solid rgba(244, 236, 222, 0.08);
 }
 
 .tui-title {
   font-weight: 600;
+  letter-spacing: 0.03em;
+  color: rgba(245, 241, 232, 0.92);
+}
+
+.tui-badge {
+  padding: 2px 12px;
+  border-radius: 4px;
+  background: var(--accent);
+  color: #0d1206;
+  font-weight: 600;
+  font-size: 0.7rem;
   letter-spacing: 0.04em;
 }
 
-.tui-path {
+.tui-infobar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  color: rgba(245, 241, 232, 0.58);
+  font-size: 0.68rem;
+  background: rgba(14, 18, 24, 0.96);
+  border-bottom: 1px solid rgba(244, 236, 222, 0.06);
+}
+
+.tui-sep {
+  color: rgba(245, 241, 232, 0.28);
+}
+
+.tui-shortcuts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 14px;
+  background: rgba(14, 18, 24, 0.96);
+  border-bottom: 1px solid rgba(244, 236, 222, 0.08);
+}
+
+.shortcut-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: 4px;
+  background: rgba(140, 80, 200, 0.35);
+  color: rgba(220, 190, 255, 0.92);
+  font-size: 0.68rem;
+  font-weight: 500;
+}
+
+.shortcut-pill kbd {
+  all: unset;
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+}
+
+.shortcut-pill-accent {
+  background: rgba(215, 241, 113, 0.18);
+  color: var(--accent);
+}
+
+.tui-conversation-header {
+  padding: 8px 14px 4px;
+  background: rgba(14, 18, 24, 0.96);
+}
+
+.tui-conv-title {
+  color: rgba(245, 241, 232, 0.82);
+  font-weight: 600;
+  font-size: 0.74rem;
+}
+
+.tui-filterbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 14px 6px;
+  background: rgba(14, 18, 24, 0.96);
+  border-bottom: 1px solid rgba(244, 236, 222, 0.1);
+  color: rgba(245, 241, 232, 0.5);
+  font-size: 0.68rem;
+}
+
+.tui-filter-sort {
+  color: rgba(245, 241, 232, 0.62);
+}
+
+.tui-table {
+  background: rgba(10, 14, 20, 0.98);
+}
+
+.tui-table-head {
+  display: flex;
+  align-items: center;
+  padding: 6px 14px;
+  border-bottom: 1px solid rgba(244, 236, 222, 0.1);
+  color: rgba(245, 241, 232, 0.55);
+  font-size: 0.66rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+}
+
+.tui-row {
+  display: flex;
+  align-items: center;
+  padding: 3px 14px;
+  color: rgba(245, 241, 232, 0.82);
+  font-size: 0.7rem;
+  border-left: 2px solid transparent;
+}
+
+.tui-row:hover {
+  background: rgba(244, 236, 222, 0.03);
+}
+
+.tui-row-active {
+  background: rgba(215, 241, 113, 0.1);
+  border-left-color: var(--accent);
+  color: rgba(245, 241, 232, 0.98);
+}
+
+.col-select {
+  width: 46px;
+  flex: 0 0 46px;
+}
+
+.col-num {
+  width: 28px;
+  flex: 0 0 28px;
+  text-align: right;
+  color: rgba(245, 241, 232, 0.42);
+}
+
+.col-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding-left: 10px;
+}
+
+.col-date {
+  width: 90px;
+  flex: 0 0 90px;
+  text-align: right;
   color: rgba(245, 241, 232, 0.52);
 }
 
-.traffic-lights {
-  display: inline-flex;
-  gap: 6px;
+.col-age {
+  width: 48px;
+  flex: 0 0 48px;
+  text-align: right;
+  color: rgba(245, 241, 232, 0.44);
 }
 
-.traffic-lights span {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: rgba(244, 236, 222, 0.32);
+.tui-check {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 1px solid rgba(244, 236, 222, 0.3);
+  border-radius: 2px;
+  vertical-align: middle;
 }
 
-.traffic-lights span:first-child {
-  background: var(--danger);
+.tui-check-on {
+  border-color: rgba(215, 241, 113, 0.5);
+  background: rgba(215, 241, 113, 0.85);
 }
 
-.traffic-lights span:nth-child(2) {
-  background: var(--warning);
-}
-
-.traffic-lights span:last-child {
-  background: var(--accent-deep);
-}
-
-.tui-summary {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.summary-cell {
-  padding: 12px;
-  border-radius: 10px;
-}
-
-.summary-label,
 .panel-kicker,
 .detail-label {
   display: block;
@@ -410,121 +521,6 @@ h1 {
   font-weight: 500;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-}
-
-.summary-cell strong {
-  display: block;
-  color: rgba(245, 241, 232, 0.92);
-  font-size: 0.95rem;
-}
-
-.summary-value {
-  display: block;
-  margin-top: 4px;
-  color: rgba(245, 241, 232, 0.62);
-  font-size: 0.78rem;
-}
-
-.tui-body {
-  grid-template-columns: minmax(0, 1.58fr) minmax(250px, 0.72fr);
-  gap: 12px;
-}
-
-.tui-side {
-  display: grid;
-  gap: 12px;
-}
-
-.tui-panel {
-  min-width: 0;
-  padding: 12px;
-  border-radius: 10px;
-}
-
-.tui-panel-main {
-  padding: 12px 12px 8px;
-}
-
-.tui-panel-header,
-.tui-table-head,
-.tui-row,
-.tui-footline,
-.tui-commandbar {
-  display: flex;
-  align-items: center;
-}
-
-.tui-panel-header,
-.tui-footline {
-  justify-content: space-between;
-  gap: 12px;
-  color: rgba(245, 241, 232, 0.62);
-  font-size: 0.74rem;
-}
-
-.tui-table-head {
-  gap: 12px;
-  margin-top: 12px;
-  padding: 8px 10px;
-  border-top: 1px solid rgba(244, 236, 222, 0.08);
-  border-bottom: 1px solid rgba(244, 236, 222, 0.08);
-  color: rgba(245, 241, 232, 0.68);
-  font-size: 0.7rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.tui-row {
-  gap: 12px;
-  margin-top: 6px;
-  padding: 10px;
-  border: 1px solid transparent;
-  border-radius: 8px;
-  color: rgba(245, 241, 232, 0.94);
-  font-size: 0.84rem;
-}
-
-.tui-row-active {
-  border-color: rgba(215, 241, 113, 0.18);
-  background: rgba(215, 241, 113, 0.07);
-}
-
-.tui-marker {
-  width: 14px;
-  height: 14px;
-  border: 1px solid rgba(244, 236, 222, 0.26);
-  border-radius: 3px;
-  flex: 0 0 14px;
-}
-
-.tui-marker-on {
-  border-color: rgba(215, 241, 113, 0.44);
-  background: rgba(215, 241, 113, 0.88);
-}
-
-.col-chat {
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.col-date,
-.col-state {
-  width: 84px;
-  flex: 0 0 84px;
-  color: rgba(245, 241, 232, 0.72);
-}
-
-.col-state-selected {
-  color: var(--accent);
-}
-
-.tui-footline {
-  margin-top: 10px;
-  padding-top: 10px;
-  border-top: 1px solid rgba(244, 236, 222, 0.08);
 }
 
 .queue-copy strong {
@@ -542,48 +538,6 @@ h1 {
 
 .queue-copy p {
   margin-top: 8px;
-}
-
-.shortcut-list,
-.status-log {
-  gap: 8px;
-  margin-top: 8px;
-}
-
-.shortcut-list span,
-.status-log span {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 9px;
-  border: 1px solid rgba(244, 236, 222, 0.08);
-  border-radius: 8px;
-  color: rgba(245, 241, 232, 0.84);
-  font-size: 0.78rem;
-}
-
-.tui-commandbar {
-  gap: 10px;
-  flex-wrap: wrap;
-  padding: 10px 12px;
-  border-radius: 10px;
-}
-
-.command-pill {
-  padding: 6px 10px;
-  border: 1px solid rgba(244, 236, 222, 0.12);
-  border-radius: 8px;
-  color: rgba(245, 241, 232, 0.68);
-  font-size: 0.74rem;
-}
-
-.command-pill-primary {
-  border-color: rgba(215, 241, 113, 0.22);
-  color: var(--accent);
-}
-
-.command-note {
-  margin-left: auto;
 }
 
 kbd {
@@ -783,8 +737,6 @@ kbd {
 
 @media (max-width: 1040px) {
 
-  .tui-summary,
-  .tui-body,
   .practical-layout,
   .final-section {
     grid-template-columns: 1fr;
@@ -858,32 +810,32 @@ kbd {
     border-top: 1px solid rgba(244, 236, 222, 0.12);
   }
 
-  .hero-stage,
-  .tui-titlebar,
-  .tui-commandbar,
-  .tui-panel,
-  .summary-cell {
-    padding-left: 14px;
-    padding-right: 14px;
+  .hero-stage {
+    padding: 8px;
   }
 
-  .tui-summary {
-    gap: 8px;
+  .tui-shortcuts {
+    gap: 4px;
   }
 
-  .tui-panel-main {
-    padding: 12px;
+  .shortcut-pill {
+    font-size: 0.62rem;
+    padding: 2px 6px;
+  }
+
+  .col-date {
+    width: 70px;
+    flex-basis: 70px;
+  }
+
+  .col-age {
+    width: 36px;
+    flex-basis: 36px;
   }
 
   .tui-row,
-  .tui-table-head,
-  .tui-footline {
-    gap: 8px;
-  }
-
-  .col-date,
-  .col-state {
-    width: 64px;
-    flex-basis: 64px;
+  .tui-table-head {
+    padding-left: 8px;
+    padding-right: 8px;
   }
 }
