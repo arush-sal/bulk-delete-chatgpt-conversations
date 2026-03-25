@@ -76,103 +76,125 @@
           <div class="stage-glow stage-glow-right"></div>
 
           <div class="app-shell">
-            <div class="app-topbar">
-              <div class="app-window-meta">
-                <span class="traffic-lights" aria-hidden="true">
-                  <span></span>
-                  <span></span>
-                  <span></span>
-                </span>
-                <strong>chatgpt-bulk</strong>
-                <span class="app-subtle">session-only login</span>
-              </div>
-              <div class="app-topbar-right">
-                <span class="app-status app-status-live">browser auth valid</span>
-                <span class="app-status">219 conversations</span>
-                <span class="app-status">cache synced 12s ago</span>
-              </div>
+            <div class="app-chrome">
+              <span class="traffic-lights" aria-hidden="true">
+                <span></span>
+                <span></span>
+                <span></span>
+              </span>
+              <span class="app-title">chatgpt-bulk</span>
+              <span class="app-subtle">interactive cleanup session</span>
             </div>
 
-            <div class="app-auth-strip">
-              <div class="auth-card">
-                <span class="strip-label">login flow</span>
-                <strong>Chrome challenge completed. Access token captured and browser closed.</strong>
-                <p>The live app starts with a real browser so ChatGPT auth happens in a context the site already trusts.</p>
+            <div class="app-meta-region">
+              <div class="meta-box">
+                <span class="strip-label">session</span>
+                <div class="meta-grid">
+                  <span class="meta-item meta-item-live">auth: valid</span>
+                  <span class="meta-item">mode: session-only</span>
+                  <span class="meta-item">browser: chrome</span>
+                  <span class="meta-item">cache: warm</span>
+                </div>
               </div>
-              <div class="auth-card auth-card-quiet">
-                <span class="strip-label">mode</span>
-                <strong>Session-only auth</strong>
-                <p>No auth file written. The TUI stays active for the current cleanup run.</p>
+              <div class="meta-box">
+                <span class="strip-label">run state</span>
+                <div class="meta-grid meta-grid-compact">
+                  <span class="meta-item">loaded: 219</span>
+                  <span class="meta-item">selected: 3</span>
+                  <span class="meta-item">sort: date desc</span>
+                  <span class="meta-item">filter: invoice</span>
+                </div>
               </div>
             </div>
 
             <div class="app-workspace">
               <section class="workspace-main">
-                <div class="workspace-toolbar">
-                  <span class="toolbar-chip toolbar-chip-strong">filter: invoice</span>
-                  <span class="toolbar-chip">sort: date desc</span>
-                  <span class="toolbar-chip">selection: 3</span>
-                </div>
-
                 <div class="terminal-window">
-                  <div class="terminal-topline">
-                    <span class="terminal-pill">conversations</span>
-                    <span class="terminal-pill terminal-pill-live">ready</span>
-                    <span class="terminal-pill">archive + delete</span>
+                  <div class="terminal-frame-header">
+                    <div class="terminal-topline">
+                      <span class="terminal-pill">conversations</span>
+                      <span class="terminal-pill terminal-pill-live">ready</span>
+                      <span class="terminal-pill">archive | delete</span>
+                    </div>
+                    <div class="terminal-shortcuts">
+                      <span><kbd>/</kbd> filter</span>
+                      <span><kbd>s</kbd> sort</span>
+                      <span><kbd>enter</kbd> proceed</span>
+                    </div>
                   </div>
 
                   <div class="terminal-layout">
                     <section class="conversation-list">
-                      <div class="terminal-heading">
-                        <span>title</span>
-                        <span>updated</span>
+                      <div class="table-toolbar">
+                        <span class="toolbar-chip toolbar-chip-strong">query: invoice</span>
+                        <span class="toolbar-chip">matches: 12</span>
+                        <span class="toolbar-chip">selected: 3</span>
+                      </div>
+                      <div class="terminal-heading terminal-heading-table">
+                        <span class="heading-title">conversation</span>
+                        <span class="heading-date">updated</span>
+                        <span class="heading-state">state</span>
                       </div>
                       <div class="row row-active">
                         <span class="checkbox checkbox-on"></span>
                         <span class="row-title">2025 invoice imports</span>
                         <span class="row-date">today</span>
+                        <span class="row-state row-state-selected">selected</span>
                       </div>
                       <div class="row">
                         <span class="checkbox checkbox-on"></span>
                         <span class="row-title">Expense reconciliation prompts</span>
                         <span class="row-date">today</span>
+                        <span class="row-state row-state-selected">selected</span>
                       </div>
                       <div class="row">
                         <span class="checkbox"></span>
                         <span class="row-title">TUI cursor bug thread</span>
                         <span class="row-date">Mar 17</span>
+                        <span class="row-state">visible</span>
                       </div>
                       <div class="row">
                         <span class="checkbox checkbox-on"></span>
                         <span class="row-title">Unused brainstorming chats</span>
                         <span class="row-date">Mar 11</span>
+                        <span class="row-state row-state-selected">selected</span>
                       </div>
                       <div class="row">
                         <span class="checkbox"></span>
                         <span class="row-title">Browser auth regression</span>
                         <span class="row-date">Mar 07</span>
+                        <span class="row-state">visible</span>
                       </div>
                       <div class="terminal-filter">
                         <span>visible 12 / 219</span>
-                        <strong>/invoice</strong>
-                        <span>a select all</span>
+                        <strong>cursor on row 1</strong>
+                        <span>space toggles selection</span>
                       </div>
                     </section>
 
                     <aside class="selection-panel">
-                      <div class="terminal-heading">
-                        <span>action queue</span>
+                      <div class="terminal-heading terminal-heading-stack">
+                        <span>action pane</span>
                         <span>enter confirms</span>
                       </div>
-                      <ul class="selection-list">
-                        <li>Archive the three invoice-related chats to clear the sidebar without losing history.</li>
-                        <li>Delete remains available when you want the chats removed from normal view.</li>
-                        <li>Debug and auth progress can surface directly in the TUI when needed.</li>
-                      </ul>
-                      <div class="action-bar">
+                      <div class="queue-block">
+                        <span class="strip-label">next action</span>
+                        <strong>Archive selected conversations</strong>
+                        <p>Clears invoice-related chats from the sidebar while keeping them recoverable.</p>
+                      </div>
+                      <div class="queue-block queue-block-subtle">
+                        <span class="strip-label">shortcuts</span>
+                        <div class="key-grid key-grid-stack">
+                          <span><kbd>space</kbd> toggle row</span>
+                          <span><kbd>a</kbd> select all</span>
+                          <span><kbd>esc</kbd> cancel action</span>
+                          <span><kbd>q</kbd> quit</span>
+                        </div>
+                      </div>
+                      <div class="action-bar action-bar-stack">
                         <span class="action-chip action-chip-primary">archive selected</span>
                         <span class="action-chip">delete selected</span>
-                        <span class="action-chip">esc back</span>
+                        <span class="action-chip">cancel</span>
                       </div>
                     </aside>
                   </div>
@@ -181,21 +203,27 @@
 
               <aside class="workspace-side">
                 <div class="side-panel">
-                  <span class="strip-label">workflow</span>
-                  <ol class="side-steps">
-                    <li>Authenticate in Chrome or another supported browser.</li>
-                    <li>Let the app hydrate cached conversations while fresh data streams in.</li>
-                    <li>Filter, select, and batch archive or delete with keyboard controls.</li>
-                  </ol>
+                  <div class="terminal-heading terminal-heading-stack">
+                    <span>status</span>
+                    <span>live</span>
+                  </div>
+                  <div class="status-list">
+                    <span>auth token refreshed</span>
+                    <span>conversation cache loaded</span>
+                    <span>list sorted by updated desc</span>
+                    <span>3 rows selected for archive</span>
+                  </div>
                 </div>
                 <div class="side-panel side-panel-compact">
-                  <span class="strip-label">keys</span>
-                  <div class="key-grid">
-                    <span><kbd>/</kbd> filter</span>
-                    <span><kbd>space</kbd> toggle</span>
-                    <span><kbd>a</kbd> select all</span>
-                    <span><kbd>enter</kbd> confirm</span>
+                  <div class="terminal-heading terminal-heading-stack">
+                    <span>help</span>
+                    <span>keyboard first</span>
                   </div>
+                  <p class="side-copy">
+                    Real browser authentication happens first, then the cleanup
+                    work shifts into the terminal where filtering, selection, and
+                    bulk actions stay fast.
+                  </p>
                 </div>
               </aside>
             </div>
