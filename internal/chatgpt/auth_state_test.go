@@ -79,11 +79,9 @@ func TestSaveLoadAndRemoveAuthState(t *testing.T) {
 	}
 }
 
-func TestResolveAuthPrefersStoredOverEnv(t *testing.T) {
+func TestResolveAuthReturnsStoredAuth(t *testing.T) {
 	authPath := filepath.Join(t.TempDir(), "auth.json")
 	t.Setenv(authFileEnvVar, authPath)
-	t.Setenv("CHATGPT_SESSION_TOKEN", "env-session")
-	t.Setenv("CHATGPT_CSRF_TOKEN", "env-csrf")
 
 	_, err := SaveAuthState(AuthState{
 		SessionToken: "stored-session",
@@ -97,7 +95,7 @@ func TestResolveAuthPrefersStoredOverEnv(t *testing.T) {
 		t.Fatalf("SaveAuthState() error = %v", err)
 	}
 
-	resolved, err := ResolveAuth(Config{})
+	resolved, err := ResolveAuth()
 	if err != nil {
 		t.Fatalf("ResolveAuth() error = %v", err)
 	}
@@ -109,79 +107,19 @@ func TestResolveAuthPrefersStoredOverEnv(t *testing.T) {
 	}
 }
 
-func TestResolveAuthFallsBackToEnv(t *testing.T) {
+func TestResolveAuthReturnsNoneWhenAuthFileMissing(t *testing.T) {
 	authPath := filepath.Join(t.TempDir(), "auth.json")
 	t.Setenv(authFileEnvVar, authPath)
-	t.Setenv("CHATGPT_SESSION_TOKEN", "env-session")
-	t.Setenv("CHATGPT_CSRF_TOKEN", "env-csrf")
 
-	resolved, err := ResolveAuth(Config{})
+	resolved, err := ResolveAuth()
 	if err != nil {
 		t.Fatalf("ResolveAuth() error = %v", err)
 	}
-	if resolved.Source != AuthSourceEnv {
-		t.Fatalf("ResolveAuth() source = %q, want %q", resolved.Source, AuthSourceEnv)
+	if resolved.Source != AuthSourceNone {
+		t.Fatalf("ResolveAuth() source = %q, want %q", resolved.Source, AuthSourceNone)
 	}
-	if resolved.State.SessionToken != "env-session" {
-		t.Fatalf("ResolveAuth() session token = %q, want env value", resolved.State.SessionToken)
-	}
-}
-
-func TestResolveAuthPrefersExplicitConfigOverStoredAndEnv(t *testing.T) {
-	authPath := filepath.Join(t.TempDir(), "auth.json")
-	t.Setenv(authFileEnvVar, authPath)
-	t.Setenv("CHATGPT_SESSION_TOKEN", "env-session")
-	t.Setenv("CHATGPT_CSRF_TOKEN", "env-csrf")
-
-	_, err := SaveAuthState(AuthState{
-		SessionToken: "stored-session",
-		CSRFToken:    "stored-csrf",
-		SavedAt:      time.Date(2026, time.March, 24, 11, 30, 0, 0, time.UTC),
-		Source:       "browser",
-	})
-	if err != nil {
-		t.Fatalf("SaveAuthState() error = %v", err)
-	}
-
-	resolved, err := ResolveAuth(Config{
-		SessionToken: "config-session",
-		CSRFToken:    "config-csrf",
-	})
-	if err != nil {
-		t.Fatalf("ResolveAuth() error = %v", err)
-	}
-	if resolved.Source != AuthSourceConfig {
-		t.Fatalf("ResolveAuth() source = %q, want %q", resolved.Source, AuthSourceConfig)
-	}
-	if resolved.State.SessionToken != "config-session" {
-		t.Fatalf("ResolveAuth() session token = %q, want config value", resolved.State.SessionToken)
-	}
-	if resolved.State.CSRFToken != "config-csrf" {
-		t.Fatalf("ResolveAuth() csrf token = %q, want config value", resolved.State.CSRFToken)
-	}
-}
-
-func TestResolveAuthIgnoresWhitespaceConfigAndFallsBackToEnv(t *testing.T) {
-	authPath := filepath.Join(t.TempDir(), "auth.json")
-	t.Setenv(authFileEnvVar, authPath)
-	t.Setenv("CHATGPT_SESSION_TOKEN", "env-session")
-	t.Setenv("CHATGPT_CSRF_TOKEN", "env-csrf")
-
-	resolved, err := ResolveAuth(Config{
-		SessionToken: " \t\n ",
-		CSRFToken:    " \t\n ",
-	})
-	if err != nil {
-		t.Fatalf("ResolveAuth() error = %v", err)
-	}
-	if resolved.Source != AuthSourceEnv {
-		t.Fatalf("ResolveAuth() source = %q, want %q", resolved.Source, AuthSourceEnv)
-	}
-	if resolved.State.SessionToken != "env-session" {
-		t.Fatalf("ResolveAuth() session token = %q, want env value after trimming whitespace config", resolved.State.SessionToken)
-	}
-	if resolved.State.CSRFToken != "env-csrf" {
-		t.Fatalf("ResolveAuth() csrf token = %q, want env value after trimming whitespace config", resolved.State.CSRFToken)
+	if resolved.Path != authPath {
+		t.Fatalf("ResolveAuth() path = %q, want %q", resolved.Path, authPath)
 	}
 }
 
@@ -193,7 +131,7 @@ func TestResolveAuthReturnsStoredDecodeError(t *testing.T) {
 		t.Fatalf("os.WriteFile(%q) error = %v", authPath, err)
 	}
 
-	_, err := ResolveAuth(Config{})
+	_, err := ResolveAuth()
 	if err == nil {
 		t.Fatalf("ResolveAuth() error = nil, want decode failure")
 	}

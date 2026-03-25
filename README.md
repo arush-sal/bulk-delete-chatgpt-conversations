@@ -110,7 +110,10 @@ Run:
 chatgpt-bulk login
 ```
 
-The tool opens Chrome or a compatible browser, waits for you to sign in or finish any challenge, then stores the minimum required auth state locally for future runs.
+The tool opens Chrome or a compatible browser, asks whether you want a permanent auth file, then waits for you to sign in or finish any challenge.
+
+- Choose permanent auth to save the minimum required auth state locally for future runs.
+- Choose the short-lived option to keep auth in-memory only and open the TUI for the current session.
 
 Stored auth location:
 
@@ -121,26 +124,14 @@ Useful auth commands:
 
 ```bash
 chatgpt-bulk login
+chatgpt-bulk login --permanent
+chatgpt-bulk login --session-only
 chatgpt-bulk auth status
 chatgpt-bulk logout
 ```
 
-### Non-interactive fallback
-
-Automation and CI-style environments can still provide auth with environment variables:
-
-```bash
-export CHATGPT_SESSION_TOKEN="..."
-export CHATGPT_CSRF_TOKEN="..." # optional
-```
-
-Resolution order is:
-
-1. Stored local auth
-2. `CHATGPT_SESSION_TOKEN` and optional `CHATGPT_CSRF_TOKEN`
-3. If neither is available, run `chatgpt-bulk login`
-
 Additional auth details are in [docs/authentication.md](./docs/authentication.md).
+For repeatable manual-assisted live verification, use the harness in [docs/manual-auth-e2e.md](./docs/manual-auth-e2e.md).
 
 ## Usage Guide
 
@@ -161,11 +152,12 @@ go run ./cmd/chatgpt-bulk
 
 ### What happens on launch
 
-1. **Stored auth check** -- The app first tries locally saved auth, then environment variables if present.
-2. **Browser refresh if needed** -- If saved auth is stale and can be refreshed, a temporary Chrome window opens and navigates to `chatgpt.com`.
-3. **Session validation** -- The app waits for ChatGPT to return a valid access token. If Chrome shows a login page or challenge, complete it there.
-4. **Browser closes** -- Once a valid access token is captured, the temporary Chrome window closes automatically.
-5. **TUI loads** -- Your conversations are fetched and displayed in the terminal.
+1. **Stored auth check** -- The app first looks for the default auth file.
+2. **Missing auth handling** -- If the auth file is missing and the terminal is interactive, the app tells you the file is missing, reminds you to use `chatgpt-bulk login` for short-lived sessions, and asks whether to create a permanent auth file.
+3. **Browser refresh if needed** -- A temporary Chrome window opens and navigates to `chatgpt.com`.
+4. **Session validation** -- The app waits for ChatGPT to return a valid access token. If Chrome shows a login page or challenge, complete it there.
+5. **Browser closes** -- Once a valid access token is captured, the temporary Chrome window closes automatically.
+6. **TUI loads** -- Your conversations are fetched and displayed in the terminal.
 
 ### CLI flags
 
@@ -177,16 +169,29 @@ go run ./cmd/chatgpt-bulk
 | `--version` | Print version and exit | |
 | `--help` | Print help and exit | |
 
+Login flags:
+
+| Flag | Description |
+|------|-------------|
+| `--permanent` | Save auth to the default auth file without prompting |
+| `--session-only` | Keep auth in-memory only and open the TUI for this session |
+
 ### Auth command examples
 
 ```bash
-# Save local auth through an interactive browser login
+# Prompt for permanent vs short-lived auth through an interactive browser login
 chatgpt-bulk login
 
-# Inspect stored auth and env-var fallback availability
+# Save local auth without prompting
+chatgpt-bulk login --permanent
+
+# Open a short-lived in-memory session
+chatgpt-bulk login --session-only
+
+# Inspect stored auth availability
 chatgpt-bulk auth status
 
-# Remove stored auth without touching environment variables
+# Remove stored auth
 chatgpt-bulk logout
 ```
 
@@ -297,13 +302,12 @@ If `--chrome-path` is not provided, the app searches these locations automatical
 
 ### Session token expired or invalid
 
-- Session tokens expire periodically. If you get a `401` error, grab a fresh token from your browser cookies.
-- Make sure you copy the full value of `__Secure-next-auth.session-token` -- it is a long JWT string.
+- ChatGPT web sessions expire periodically. If you get a `401` error, rerun `chatgpt-bulk login` and complete the browser flow again.
+- If you want the next launch to reuse auth automatically, choose the permanent auth-file option during login.
 
 ### 403 Forbidden / Cloudflare challenge
 
 - This usually means the session needs a browser challenge. Run without `--headless` so the Chrome window is visible, complete any challenges, and let the app capture the token.
-- You can also try providing both `CHATGPT_SESSION_TOKEN` and `CHATGPT_CSRF_TOKEN`.
 
 ### Chrome is installed in a non-standard location
 
