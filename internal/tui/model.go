@@ -315,9 +315,11 @@ func (m Model) updateSelection(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.cursor++
 		}
 	case isPageUpKey(msg):
-		m.cursor = max(0, m.cursor-m.pageSize())
+		m.cursor -= m.pageSize()
+		m.clampCursor()
 	case isPageDownKey(msg):
-		m.cursor = min(len(m.filtered)-1, m.cursor+m.pageSize())
+		m.cursor += m.pageSize()
+		m.clampCursor()
 	case isToggleKey(msg):
 		m.toggleCurrent()
 	case matchesRune(msg, "a"):
@@ -375,6 +377,11 @@ func (m Model) updateConfirmation(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 func (m *Model) toggleCurrent() {
 	if len(m.filtered) == 0 {
+		m.cursor = 0
+		return
+	}
+	m.clampCursor()
+	if m.cursor < 0 || m.cursor >= len(m.filtered) {
 		return
 	}
 	id := m.filtered[m.cursor].ID
@@ -427,8 +434,20 @@ func (m *Model) applyFilterAndSort() {
 	})
 
 	// Clamp cursor
+	m.clampCursor()
+}
+
+func (m *Model) clampCursor() {
+	if len(m.filtered) == 0 {
+		m.cursor = 0
+		return
+	}
+	if m.cursor < 0 {
+		m.cursor = 0
+		return
+	}
 	if m.cursor >= len(m.filtered) {
-		m.cursor = max(0, len(m.filtered)-1)
+		m.cursor = len(m.filtered) - 1
 	}
 }
 
