@@ -17,14 +17,16 @@ import (
 )
 
 type config struct {
-	binaryPath        string
-	chromePath        string
-	authPath          string
-	timeout           time.Duration
-	headless          bool
-	debug             bool
-	keepArtifacts     bool
-	verifySessionOnly bool
+	binaryPath     string
+	chromePath     string
+	authPath       string
+	timeout        time.Duration
+	headless       bool
+	debug          bool
+	keepArtifacts  bool
+	runMissingAuth bool
+	runSessionOnly bool
+	runPermanent   bool
 }
 
 func main() {
@@ -36,17 +38,66 @@ func main() {
 }
 
 func parseFlags() config {
-	cfg := config{}
-	flag.StringVar(&cfg.binaryPath, "binary", "", "Path to an existing chatgpt-bulk binary; default builds a temp binary from the repo")
-	flag.StringVar(&cfg.chromePath, "chrome-path", "", "Optional Chrome/Edge/Brave executable path forwarded to chatgpt-bulk")
-	flag.StringVar(&cfg.authPath, "auth-file", "", "Optional auth file path; default uses a temp file")
-	flag.DurationVar(&cfg.timeout, "timeout", 10*time.Minute, "Overall timeout for each interactive auth step")
-	flag.BoolVar(&cfg.headless, "headless", false, "Forward --headless to chatgpt-bulk")
-	flag.BoolVar(&cfg.debug, "debug", false, "Forward --debug to chatgpt-bulk")
-	flag.BoolVar(&cfg.keepArtifacts, "keep-artifacts", false, "Keep the temp auth file and temp binary instead of cleaning them up")
-	flag.BoolVar(&cfg.verifySessionOnly, "verify-session-only", false, "Also run a manual-assisted session-only auth check")
-	flag.Parse()
+	cfg, err := parseFlagsFromArgs(os.Args[1:])
+	if err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			os.Exit(0)
+		}
+		os.Exit(2)
+	}
 	return cfg
+}
+
+func parseFlagsFromArgs(args []string) (config, error) {
+	cfg := config{}
+	fs := flag.NewFlagSet("chatgpt-bulk-auth-e2e", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	fs.Usage = func() {
+		fmt.Fprintln(fs.Output(), "Usage: chatgpt-bulk-auth-e2e [flags]")
+		fmt.Fprintln(fs.Output(), "")
+		fmt.Fprintln(fs.Output(), "Default with no stage flags: run the full manual-assisted auth suite in this order:")
+		fmt.Fprintln(fs.Output(), "  1. missing-auth-file / no-auth-file behavior")
+		fmt.Fprintln(fs.Output(), "  2. temporary/session-only auth")
+		fmt.Fprintln(fs.Output(), "  3. permanent auth")
+		fmt.Fprintln(fs.Output(), "")
+		fmt.Fprintln(fs.Output(), "Pass one or more stage flags to run only those stages.")
+		fmt.Fprintln(fs.Output(), "")
+		fs.PrintDefaults()
+	}
+
+	fs.StringVar(&cfg.binaryPath, "binary", "", "Path to an existing chatgpt-bulk binary; default builds a temp binary from the repo")
+	fs.StringVar(&cfg.chromePath, "chrome-path", "", "Optional Chrome/Edge/Brave executable path forwarded to chatgpt-bulk")
+	fs.StringVar(&cfg.authPath, "auth-file", "", "Optional auth file path; default uses a temp file")
+	fs.DurationVar(&cfg.timeout, "timeout", 10*time.Minute, "Overall timeout for each interactive auth step")
+	fs.BoolVar(&cfg.headless, "headless", false, "Forward --headless to chatgpt-bulk")
+	fs.BoolVar(&cfg.debug, "debug", false, "Forward --debug to chatgpt-bulk")
+	fs.BoolVar(&cfg.keepArtifacts, "keep-artifacts", false, "Keep the temp auth file and temp binary instead of cleaning them up")
+	fs.BoolVar(&cfg.runMissingAuth, "missing-auth", false, "Include the missing-auth-file / no-auth-file verification stage")
+	fs.BoolVar(&cfg.runSessionOnly, "session-only", false, "Include the temporary/session-only verification stage")
+	fs.BoolVar(&cfg.runPermanent, "permanent", false, "Include the permanent-auth verification stage")
+
+	if err := fs.Parse(args); err != nil {
+		return config{}, err
+	}
+	return cfg, nil
+}
+
+func (cfg config) selectedStages() []string {
+	if cfg.runMissingAuth || cfg.runSessionOnly || cfg.runPermanent {
+		var stages []string
+		if cfg.runMissingAuth {
+			stages = append(stages, "missing-auth")
+		}
+		if cfg.runSessionOnly {
+			stages = append(stages, "session-only")
+		}
+		if cfg.runPermanent {
+			stages = append(stages, "permanent")
+		}
+		return stages
+	}
+
+	return []string{"missing-auth", "session-only", "permanent"}
 }
 
 func run(cfg config) error {
@@ -74,21 +125,111 @@ func run(cfg config) error {
 	fmt.Printf("Repository root: %s\n", repoRoot)
 	fmt.Printf("Auth file under test: %s\n", authPath)
 	fmt.Printf("chatgpt-bulk binary: %s\n", binaryPath)
+	fmt.Printf("Selected stages: %s\n", strings.Join(cfg.selectedStages(), ", "))
 	fmt.Println()
 
-	if err := runPermanentFlow(binaryPath, authPath, cfg); err != nil {
-		return err
-	}
+	for i, stage := range cfg.selectedStages() {
+		if i > 0 {
+			fmt.Println()
+		}
 
-	if cfg.verifySessionOnly {
-		fmt.Println()
-		if err := runSessionOnlyFlow(authPath, cfg); err != nil {
-			return err
+		switch stage {
+		case "missing-auth":
+			if err := runMissingAuthFlow(binaryPath, authPath, cfg); err != nil {
+				return err
+			}
+		case "session-only":
+			if err := runSessionOnlyFlow(authPath, cfg); err != nil {
+				return err
+			}
+		case "permanent":
+			if err := runPermanentFlow(binaryPath, authPath, cfg); err != nil {
+				return err
+			}
+		default:
+			return fmt.Errorf("unknown stage %q", stage)
 		}
 	}
 
 	fmt.Println()
 	fmt.Println("Manual-assisted auth E2E verification completed successfully.")
+	return nil
+}
+
+func runMissingAuthFlow(binaryPath, authPath string, cfg config) error {
+	fmt.Println("=== Missing auth-file flow ===")
+	if err := os.Remove(authPath); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("clear auth file before missing-auth flow: %w", err)
+	}
+
+	fmt.Println("The harness will run `chatgpt-bulk` without an auth file and verify the no-auth-file guidance.")
+	output, err := runCommandExpectFailure(cfg.timeout, binaryPath, authPath)
+	if err != nil {
+		return err
+	}
+
+	fmt.Println("`chatgpt-bulk` output:")
+	fmt.Println(output)
+
+	if !strings.Contains(output, fmt.Sprintf("Stored ChatGPT auth file not found at %s", authPath)) {
+		return fmt.Errorf("missing-auth flow did not mention the missing auth file path:\n%s", output)
+	}
+	if !strings.Contains(output, "Use `chatgpt-bulk login` for short-lived sessions.") {
+		return fmt.Errorf("missing-auth flow did not include short-lived login guidance:\n%s", output)
+	}
+	if !strings.Contains(output, "run `chatgpt-bulk login` to authenticate") {
+		return fmt.Errorf("missing-auth flow did not include the authenticate guidance:\n%s", output)
+	}
+
+	fmt.Println("Missing-auth-file guidance verified.")
+	return nil
+}
+
+func runCommandExpectFailure(timeout time.Duration, binaryPath, authPath string) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, binaryPath)
+	cmd.Env = append(os.Environ(), "CHATGPT_BULK_AUTH_FILE="+authPath)
+	output, err := cmd.CombinedOutput()
+	if ctx.Err() != nil {
+		return "", fmt.Errorf("chatgpt-bulk missing-auth flow timed out after %s", timeout)
+	}
+	if err == nil {
+		return "", errors.New("chatgpt-bulk unexpectedly succeeded without an auth file")
+	}
+	return string(output), nil
+}
+
+func runPermanentFlow(binaryPath, authPath string, cfg config) error {
+	fmt.Println("=== Permanent auth-file flow ===")
+	fmt.Println("The harness will launch `chatgpt-bulk login --permanent` with a temporary auth file.")
+	fmt.Println("Complete ChatGPT sign-in and any browser challenges when the browser opens.")
+	fmt.Printf("Waiting up to %s for login to finish.\n", cfg.timeout)
+	fmt.Println()
+
+	if err := runLoginCommand(binaryPath, authPath, cfg, "--permanent"); err != nil {
+		return fmt.Errorf("permanent login flow: %w", err)
+	}
+	if err := waitForAuthFile(authPath, 5*time.Second); err != nil {
+		return err
+	}
+	fmt.Printf("Auth file created: %s\n", authPath)
+
+	statusOutput, err := runStatusCommand(binaryPath, authPath)
+	if err != nil {
+		return err
+	}
+	if !authStatusLooksPresent(statusOutput) {
+		return fmt.Errorf("auth status did not report stored auth present:\n%s", statusOutput)
+	}
+	fmt.Println("`chatgpt-bulk auth status` confirmed stored auth is present.")
+
+	if err := verifySavedAuthReuse(authPath, cfg.timeout); err != nil {
+		return err
+	}
+	fmt.Println("Stored auth reuse verified through the same resolve/new/authenticate path used before the TUI starts.")
+
 	return nil
 }
 
@@ -138,39 +279,6 @@ func prepareBinary(repoRoot, explicit string) (string, func(), error) {
 
 	cleanup := func() { _ = os.RemoveAll(dir) }
 	return binaryPath, cleanup, nil
-}
-
-func runPermanentFlow(binaryPath, authPath string, cfg config) error {
-	fmt.Println("=== Permanent auth-file flow ===")
-	fmt.Println("The harness will launch `chatgpt-bulk login --permanent` with a temporary auth file.")
-	fmt.Println("Complete ChatGPT sign-in and any browser challenges when the browser opens.")
-	fmt.Printf("Waiting up to %s for login to finish.\n", cfg.timeout)
-	fmt.Println()
-
-	if err := runLoginCommand(binaryPath, authPath, cfg, "--permanent"); err != nil {
-		return fmt.Errorf("permanent login flow: %w", err)
-	}
-
-	if err := waitForAuthFile(authPath, 5*time.Second); err != nil {
-		return err
-	}
-	fmt.Printf("Auth file created: %s\n", authPath)
-
-	statusOutput, err := runStatusCommand(binaryPath, authPath)
-	if err != nil {
-		return err
-	}
-	if !authStatusLooksPresent(statusOutput) {
-		return fmt.Errorf("auth status did not report stored auth present:\n%s", statusOutput)
-	}
-	fmt.Println("`chatgpt-bulk auth status` confirmed stored auth is present.")
-
-	if err := verifySavedAuthReuse(authPath, cfg.timeout); err != nil {
-		return err
-	}
-	fmt.Println("Stored auth reuse verified through the same resolve/new/authenticate path used before the TUI starts.")
-
-	return nil
 }
 
 func runSessionOnlyFlow(authPath string, cfg config) error {
