@@ -11,6 +11,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Validate install script syntax
+        run: sh -n scripts/install-via-bin.sh
+
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod

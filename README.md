@@ -53,10 +53,30 @@ Download the latest release for your platform from the [Releases](https://github
 | Linux amd64 | `chatgpt-bulk_*_linux_amd64.tar.gz` |
 | Linux arm64 | `chatgpt-bulk_*_linux_arm64.tar.gz` |
 
-**Using [bin](github.com/marcosnils/bin)**
+**Recommended one-line install via [bin](https://github.com/marcosnils/bin) and GitHub Releases**
 
 ```bash
-bin install github.com/arush-sal/bulk-delete-chatgpt-conversations/
+curl -fsSL https://raw.githubusercontent.com/arush-sal/bulk-delete-chatgpt-conversations/master/scripts/install-via-bin.sh | sh
+```
+
+The script:
+
+- checks `hash bin` first, then downloads `bin` into `~/.local/bin` when it is not already available
+- downloads `chatgpt-bulk` from this repo's latest GitHub release into `~/.local/bin/chatgpt-bulk` through `bin install`
+- prefixes `~/.local/bin` into `PATH` while bootstrapping so first-time `bin` installs stay non-interactive
+
+If you already have `bin`, install directly from releases with:
+
+```bash
+mkdir -p "$HOME/.local/bin" && bin install github.com/arush-sal/bulk-delete-chatgpt-conversations "$HOME/.local/bin/chatgpt-bulk"
+```
+
+If GitHub rate-limits anonymous release API requests in your environment, export `GITHUB_AUTH_TOKEN` before running the script or `bin install`.
+
+If you want `bin` bootstrapped somewhere else, set `BIN_INSTALL_DIR` before running the script:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/arush-sal/bulk-delete-chatgpt-conversations/master/scripts/install-via-bin.sh | BIN_INSTALL_DIR="$HOME/bin" sh
 ```
 
 **macOS / Linux/ Windows:**
