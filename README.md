@@ -133,6 +133,7 @@ chatgpt-bulk logout
 
 Additional auth details are in [docs/authentication.md](./docs/authentication.md).
 For repeatable manual-assisted live verification, use the harness in [docs/manual-auth-e2e.md](./docs/manual-auth-e2e.md). With no stage flags it runs the full missing-auth, session-only, and permanent-auth suite.
+Desktop packaging and distribution planning is tracked in [docs/desktop-packaging-rfc.md](./docs/desktop-packaging-rfc.md).
 
 ## Usage Guide
 
