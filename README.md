@@ -60,7 +60,7 @@ curl -fsSL https://raw.githubusercontent.com/arush-sal/bulk-delete-chatgpt-conve
 
 The script:
 
-- installs `bin` into `~/.local/bin` when `bin` is not already available
+- checks `hash bin` first, then downloads `bin` into `~/.local/bin` when it is not already available
 - downloads `chatgpt-bulk` from this repo's latest GitHub release into `~/.local/bin/chatgpt-bulk` through `bin install`
 - prefixes `~/.local/bin` into `PATH` while bootstrapping so first-time `bin` installs stay non-interactive
 
@@ -70,7 +70,7 @@ If you already have `bin`, install directly from releases with:
 mkdir -p "$HOME/.local/bin" && bin install github.com/arush-sal/bulk-delete-chatgpt-conversations "$HOME/.local/bin/chatgpt-bulk"
 ```
 
-If GitHub rate-limits anonymous release API requests in your environment, export `GITHUB_AUTH_TOKEN` before running `bin install`.
+If GitHub rate-limits anonymous release API requests in your environment, export `GITHUB_AUTH_TOKEN` before running the script or `bin install`.
 
 If you want `bin` bootstrapped somewhere else, set `BIN_INSTALL_DIR` before running the script:
 

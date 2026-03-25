@@ -2,9 +2,8 @@
 
 set -eu
 
-BIN_RELEASES_LATEST_URL="https://github.com/marcosnils/bin/releases/latest"
+BIN_RELEASES_API_URL="https://api.github.com/repos/marcosnils/bin/releases"
 TOOL_REPOSITORY="github.com/arush-sal/bulk-delete-chatgpt-conversations"
-TOOL_RELEASES_LATEST_URL="https://github.com/arush-sal/bulk-delete-chatgpt-conversations/releases/latest"
 
 log() {
 	printf '%s\n' "$*" >&2
@@ -35,23 +34,29 @@ download_to() {
 	fail "curl or wget is required"
 }
 
-resolve_final_url() {
+fetch_to_stdout() {
 	url=$1
 
 	if command_exists curl; then
-		curl -fsSL -o /dev/null -w '%{url_effective}' "$url"
+		if [ -n "${GITHUB_AUTH_TOKEN:-}" ]; then
+			curl -fsSL \
+				-H "Accept: application/vnd.github+json" \
+				-H "Authorization: Bearer ${GITHUB_AUTH_TOKEN}" \
+				"$url"
+			return 0
+		fi
+		curl -fsSL "$url"
 		return 0
 	fi
 	if command_exists wget; then
-		wget -S --max-redirect=20 -O /dev/null "$url" 2>&1 | awk '
-			tolower($1) == "location:" {
-				location = $2
-			}
-			END {
-				gsub(/\r/, "", location)
-				print location
-			}
-		'
+		if [ -n "${GITHUB_AUTH_TOKEN:-}" ]; then
+			wget -qO - \
+				--header="Accept: application/vnd.github+json" \
+				--header="Authorization: Bearer ${GITHUB_AUTH_TOKEN}" \
+				"$url"
+			return 0
+		fi
+		wget -qO - "$url"
 		return 0
 	fi
 
@@ -86,9 +91,22 @@ detect_arch() {
 	esac
 }
 
-extract_release_tag() {
-	final_url=$1
-	printf '%s\n' "${final_url##*/}"
+find_bin_asset_url() {
+	os_name=$1
+	arch_name=$2
+	asset_suffix="_${os_name}_${arch_name}"
+
+	if command_exists jq; then
+		fetch_to_stdout "$BIN_RELEASES_API_URL" |
+			jq -r '.[0].assets[].browser_download_url' |
+			grep "${asset_suffix}\$" |
+			head -n 1
+		return 0
+	fi
+
+	fetch_to_stdout "$BIN_RELEASES_API_URL" |
+		sed -n "s/.*\"browser_download_url\": \"\\(https:[^\"]*${asset_suffix}\\)\".*/\\1/p" |
+		head -n 1
 }
 
 print_path_hint() {
@@ -105,27 +123,30 @@ print_path_hint() {
 	log "  export PATH=\"$install_dir:\$PATH\""
 }
 
-bootstrap_bin() {
-	install_dir=$1
-	os_name=$(detect_os)
-	arch_name=$(detect_arch)
+download_and_install() {
+	name=$1
+	url=$2
+	install_dir=$3
+
+	[ -n "$url" ] || fail "could not resolve a download URL for ${name}"
 
 	tmpdir=$(mktemp -d 2>/dev/null || mktemp -d -t chatgpt-bulk-bin)
 	trap 'rm -rf "$tmpdir"' EXIT INT TERM HUP
 
-	release_tag=$(extract_release_tag "$(resolve_final_url "$BIN_RELEASES_LATEST_URL")")
-	[ -n "$release_tag" ] || fail "could not resolve the latest marcosnils/bin release"
-
-	release_version=${release_tag#v}
-	asset_url="https://github.com/marcosnils/bin/releases/download/${release_tag}/bin_${release_version}_${os_name}_${arch_name}"
-	asset_path="$tmpdir/bin"
-	download_to "$asset_url" "$asset_path"
+	asset_path="$tmpdir/$name"
+	download_to "$url" "$asset_path"
 
 	mkdir -p "$install_dir"
 	chmod +x "$asset_path"
-	bin_path="$install_dir/bin"
-	mv "$asset_path" "$bin_path"
-	printf '%s\n' "$bin_path"
+	mv "$asset_path" "$install_dir/$name"
+}
+
+bootstrap_bin() {
+	install_dir=$1
+	os_name=$(detect_os)
+	arch_name=$(detect_arch)
+	asset_url=$(find_bin_asset_url "$os_name" "$arch_name")
+	download_and_install "bin" "$asset_url" "$install_dir"
 }
 
 main() {
@@ -134,22 +155,23 @@ main() {
 	fi
 	install_dir=${BIN_INSTALL_DIR:-"$HOME/.local/bin"}
 	tool_path="$install_dir/chatgpt-bulk"
+	path_with_install_dir="$install_dir:$PATH"
 
-	if command_exists bin; then
+	if hash bin 2>/dev/null; then
 		bin_command=$(command -v bin)
 		log "Using existing bin at $bin_command"
 	else
-		log "Installing bin into $install_dir"
-		bin_command=$(bootstrap_bin "$install_dir")
+		log ""
+		log "Downloading bin..."
+		bootstrap_bin "$install_dir"
+		hash -r 2>/dev/null || true
+		bin_command="$install_dir/bin"
 		log "Installed bin at $bin_command"
 	fi
 
-	tool_release_tag=$(extract_release_tag "$(resolve_final_url "$TOOL_RELEASES_LATEST_URL")")
-	[ -n "$tool_release_tag" ] || fail "could not resolve the latest chatgpt-bulk release"
-
 	log "Installing chatgpt-bulk from GitHub releases"
 	mkdir -p "$install_dir"
-	PATH="$install_dir:$PATH" "$bin_command" install "${TOOL_REPOSITORY}/releases/tag/${tool_release_tag}" "$tool_path"
+	PATH="$path_with_install_dir" "$bin_command" install "${TOOL_REPOSITORY}" "$tool_path"
 
 	log ""
 	log "Installed chatgpt-bulk. Verify with:"
