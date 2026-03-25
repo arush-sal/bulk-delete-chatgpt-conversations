@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
@@ -147,8 +148,8 @@ func TestUpdateSelectionPageDownUsesRenderedSelectionHeight(t *testing.T) {
 		t.Fatalf("updateSelection() returned %T, want tui.Model", gotModel)
 	}
 
-	if got.cursor != 8 {
-		t.Fatalf("cursor after pgdown with active filter = %d, want 8", got.cursor)
+	if got.cursor != 7 {
+		t.Fatalf("cursor after pgdown with active filter = %d, want 7", got.cursor)
 	}
 }
 
@@ -176,8 +177,49 @@ func TestUpdateSelectionPageUpUsesRenderedSelectionHeight(t *testing.T) {
 		t.Fatalf("updateSelection() returned %T, want tui.Model", gotModel)
 	}
 
-	if got.cursor != 10 {
-		t.Fatalf("cursor after pgup with active filter = %d, want 10", got.cursor)
+	if got.cursor != 11 {
+		t.Fatalf("cursor after pgup with active filter = %d, want 11", got.cursor)
+	}
+}
+
+func TestViewSelectionLayoutIncludesSummaryCardsAndSidebarPanels(t *testing.T) {
+	model := Model{
+		phase:     phaseSelect,
+		width:     120,
+		height:    36,
+		email:     "user@example.com",
+		sessionID: "sess-123",
+		version:   "vtest",
+		conversations: []chatgpt.Conversation{
+			{ID: "1", Title: "Alpha"},
+			{ID: "2", Title: "Beta", IsArchived: true},
+		},
+		selected: map[string]struct{}{
+			"1": {},
+		},
+	}
+	model.applyFilterAndSort()
+
+	view := model.View().Content
+
+	for _, want := range []string{
+		"SESSION",
+		"MODE",
+		"CACHE",
+		"SELECTION",
+		"Conversations",
+		"Next Action",
+		"Keyboard",
+		"Status Log",
+		"archive selected",
+		"delete selected",
+		"cancel",
+		"Updated",
+		"State",
+	} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("View() missing %q\n%s", want, view)
+		}
 	}
 }
 
