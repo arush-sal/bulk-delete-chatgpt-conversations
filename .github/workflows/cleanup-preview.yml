@@ -1,5 +1,5 @@
 # Clean up the preview environment when a site-related PR is closed,
-# then redeploy production from master so the live site is restored.
+# then trigger a production redeploy to restore the live site.
 name: Cleanup Site Preview
 
 on:
@@ -10,8 +10,7 @@ on:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
+  actions: write
   deployments: write
 
 concurrency:
@@ -63,24 +62,15 @@ jobs:
 
   redeploy-production:
     needs: cleanup
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout master
-        uses: actions/checkout@v4
+      - name: Trigger production deploy
+        uses: actions/github-script@v7
         with:
-          ref: master
-
-      - name: Setup Pages
-        uses: actions/configure-pages@v5
-
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: "site"
-
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+          script: |
+            await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'deploy-site.yml',
+              ref: 'master',
+            });
