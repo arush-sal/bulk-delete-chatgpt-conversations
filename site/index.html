@@ -211,7 +211,7 @@
       </section>
 
       <section class="section" id="workflow">
-        <div class="section-intro">
+        <div class="section-intro scroll-reveal">
           <p class="eyebrow">Why it works</p>
           <h2>Real browser in, bulk action out.</h2>
           <p>
@@ -222,22 +222,22 @@
         </div>
 
         <div class="workflow-band">
-          <article>
+          <article class="scroll-reveal">
             <span>01</span>
             <h3>Open login</h3>
             <p>Launches Chrome-compatible browser automation in a context that can pass normal web checks.</p>
           </article>
-          <article>
+          <article class="scroll-reveal">
             <span>02</span>
             <h3>Capture auth</h3>
             <p>Supports both saved auth for repeat use and session-only auth for a one-off cleanup run.</p>
           </article>
-          <article>
+          <article class="scroll-reveal">
             <span>03</span>
             <h3>Load conversations</h3>
             <p>Shows cached metadata quickly, then refreshes in the background so the list becomes usable sooner.</p>
           </article>
-          <article>
+          <article class="scroll-reveal">
             <span>04</span>
             <h3>Archive or delete</h3>
             <p>Filter by title, multi-select, confirm the action, and stop clicking through the sidebar one chat at a time.</p>
@@ -246,13 +246,13 @@
       </section>
 
       <section class="section practical-section" id="install">
-        <div class="section-intro">
+        <div class="section-intro scroll-reveal">
           <p class="eyebrow">Practical use</p>
           <h2>Keep the page short. Put the detail where operators need it.</h2>
         </div>
 
         <div class="practical-layout">
-          <div class="command-panel">
+          <div class="command-panel scroll-reveal">
             <p class="panel-kicker">first run</p>
             <pre><code>chatgpt-bulk login
 chatgpt-bulk
@@ -266,7 +266,7 @@ go run ./cmd/chatgpt-bulk</code></pre>
             </p>
           </div>
 
-          <div class="practical-copy">
+          <div class="practical-copy scroll-reveal">
             <div class="detail-row">
               <p class="detail-label">Operating model</p>
               <p>
@@ -289,7 +289,7 @@ go run ./cmd/chatgpt-bulk</code></pre>
         </div>
       </section>
 
-      <section class="section final-section" id="docs">
+      <section class="section final-section scroll-reveal" id="docs">
         <div class="final-copy">
           <p class="eyebrow">Next step</p>
           <h2>Use the landing page to understand the tool in a glance, then go straight to the operational docs.</h2>
@@ -310,5 +310,24 @@ go run ./cmd/chatgpt-bulk</code></pre>
         </div>
       </section>
     </main>
+    <script>
+      // Header shrink on scroll
+      const header = document.querySelector('.site-header');
+      window.addEventListener('scroll', () => {
+        header.classList.toggle('scrolled', window.scrollY > 40);
+      }, { passive: true });
+
+      // Scroll-reveal via IntersectionObserver
+      const reveals = document.querySelectorAll('.scroll-reveal');
+      const observer = new IntersectionObserver((entries) => {
+        entries.forEach(e => {
+          if (e.isIntersecting) {
+            e.target.classList.add('visible');
+            observer.unobserve(e.target);
+          }
+        });
+      }, { threshold: 0.15 });
+      reveals.forEach(el => observer.observe(el));
+    </script>
   </body>
 </html>
