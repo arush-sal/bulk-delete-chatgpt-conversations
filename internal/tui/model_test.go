@@ -209,7 +209,7 @@ func TestViewSelectionLayoutIncludesSummaryCardsAndSidebarPanels(t *testing.T) {
 		"SELECTION",
 		"Conversations",
 		"Next Action",
-		"Keyboard",
+		"keyboard first",
 		"Status Log",
 		"archive selected",
 		"delete selected",

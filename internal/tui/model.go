@@ -726,7 +726,7 @@ func (m Model) renderSidebar(height int, width int) string {
 	bottomH := max(6, innerH-topH-middleH)
 
 	nextAction := m.renderPanelWithWidth("Next Action", m.renderNextActionPanel(), topH+3, width)
-	shortcuts := m.renderPanelWithWidth("Keyboard", m.renderShortcutsPanel(), middleH+3, width)
+	shortcuts := m.renderPanelWithWidth("keyboard first", m.renderShortcutsPanel(), middleH+3, width)
 	status := m.renderPanelWithWidth("Status Log", m.renderStatusLogPanel(bottomH), bottomH+3, width)
 	return lipgloss.JoinVertical(lipgloss.Left, nextAction, shortcuts, status)
 }
