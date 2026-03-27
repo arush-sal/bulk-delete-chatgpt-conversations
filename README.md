@@ -3,14 +3,12 @@
     <img src="./assets/transparent-background.png" alt="logo" height="200" />
 </p>
 
+# Bulk Delete ChatGPT Conversations
+
 ![GitHub stars](https://img.shields.io/github/stars/arush-sal/bulk-delete-chatgpt-conversations?style=social)
 ![GitHub forks](https://img.shields.io/github/forks/arush-sal/bulk-delete-chatgpt-conversations?style=social)
 ![License](https://img.shields.io/github/license/arush-sal/bulk-delete-chatgpt-conversations)
 ![Last Commit](https://img.shields.io/github/last-commit/arush-sal/bulk-delete-chatgpt-conversations)
-
-<p align="center">
-  <image src="assets/demo-regular.gif" width="780" height="480"/>
-</p>
 
 A browser-assisted Go TUI for cleaning up your ChatGPT history without clicking through the sidebar one conversation at a time.
 
