@@ -56,7 +56,7 @@ Download the latest release for your platform from the [Releases](https://github
 **Recommended one-line install via [bin](https://github.com/marcosnils/bin) and GitHub Releases**
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/arush-sal/bulk-delete-chatgpt-conversations/master/scripts/install-via-bin.sh | sh
+curl -fsSL https://bdcc.aru.sh/install | sh
 ```
 
 The script:
@@ -76,7 +76,7 @@ If GitHub rate-limits anonymous release API requests in your environment, export
 If you want `bin` bootstrapped somewhere else, set `BIN_INSTALL_DIR` before running the script:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/arush-sal/bulk-delete-chatgpt-conversations/master/scripts/install-via-bin.sh | BIN_INSTALL_DIR="$HOME/bin" sh
+curl -fsSL https://bdcc.aru.sh/install | BIN_INSTALL_DIR="$HOME/bin" sh
 ```
 
 **macOS / Linux/ Windows:**
